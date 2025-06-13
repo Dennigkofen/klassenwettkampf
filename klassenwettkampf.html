@@ -384,27 +384,65 @@
             box-shadow: 0 0 30px rgba(255,215,0,0.2);
         }
 
+        /* Champions Hall */
+        .champions-hall {
+            background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,215,0,0.05));
+            border: 2px solid rgba(255,215,0,0.3);
+            border-radius: 25px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 0 30px rgba(255,215,0,0.2);
+        }
+
+        .champions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .champions-category {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            border-radius: 20px;
+            padding: 25px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .category-title {
+            color: var(--gold);
+            margin: 0 0 20px 0;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
         .champion-card {
             background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
             border-radius: 15px;
-            padding: 20px;
-            margin: 15px 0;
+            padding: 15px;
+            margin: 10px 0;
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 15px;
             transition: all 0.3s ease;
         }
 
         .champion-card:hover {
-            transform: translateX(10px);
-            box-shadow: 0 10px 30px rgba(255,215,0,0.3);
+            transform: translateX(5px);
+            box-shadow: 0 5px 20px rgba(255,215,0,0.2);
         }
 
         .champion-rank {
             font-family: 'Orbitron', monospace;
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: 900;
-            width: 50px;
+            width: 35px;
             text-align: center;
         }
 
@@ -413,15 +451,32 @@
         }
 
         .champion-name {
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             font-weight: 700;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
 
         .champion-stats {
             font-family: 'Orbitron', monospace;
-            font-size: 1.1rem;
+            font-size: 0.95rem;
             color: var(--accent-color);
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .champions-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .category-title {
+                font-size: 1.1rem;
+            }
+            
+            .champion-card {
+                padding: 12px;
+                gap: 10px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -1373,17 +1428,6 @@
     </div>
 
     <div class="container">
-        <!-- Champions Podium -->
-        <div class="winners-podium fade-in">
-            <h2 class="winners-title">🏆 Top 3 Champions</h2>
-            <div class="podium-container" id="topWinners">
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p>Lade Champions...</p>
-                </div>
-            </div>
-        </div>
-
         <!-- Statistiken Overview -->
         <div class="stats-overview fade-in">
             <div class="stat-card">
@@ -1441,23 +1485,41 @@
         <div class="champions-hall fade-in">
             <h2 class="section-title">🏅 Hall of Champions</h2>
             
-            <h3 style="color: var(--gold); margin: 30px 0 20px 0; font-family: 'Orbitron', monospace;">
-                <i class="fas fa-trophy"></i> Meiste Wochensiege
-            </h3>
-            <div id="weeklyChampions">
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p>Lade Champions...</p>
+            <div class="champions-grid">
+                <div class="champions-category">
+                    <h3 class="category-title">
+                        <i class="fas fa-trophy"></i> Meiste Wochensiege
+                    </h3>
+                    <div id="weeklyChampions">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Lade Champions...</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <h3 style="color: var(--gold); margin: 30px 0 20px 0; font-family: 'Orbitron', monospace;">
-                <i class="fas fa-crown"></i> Meiste Season-Siege
-            </h3>
-            <div id="seasonChampions">
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p>Lade Champions...</p>
+                <div class="champions-category">
+                    <h3 class="category-title">
+                        <i class="fas fa-crown"></i> Meiste Season-Siege
+                    </h3>
+                    <div id="seasonChampions">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Lade Champions...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="champions-category">
+                    <h3 class="category-title">
+                        <i class="fas fa-chart-line"></i> Größte Steigerung
+                    </h3>
+                    <div id="improvementChampions">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Lade Champions...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1576,89 +1638,11 @@
 
         // Haupt-Dashboard rendern
         function renderDashboard() {
-            renderTopWinners();
             renderStats();
             renderOverallRanking();
             renderSeasonTabs();
             renderSeasonRanking(currentActiveSeason);
             renderChampions();
-        }
-
-        // Top 3 Winners rendern - komplett neuer Code
-        function renderTopWinners() {
-            const sortedStudents = [...dashboardData.students].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
-            const top3 = sortedStudents.slice(0, 3);
-            
-            if (top3.length === 0) {
-                document.getElementById('topWinners').innerHTML = '<p style="text-align: center; color: rgba(255,255,255,0.7);">Noch keine Daten verfügbar</p>';
-                return;
-            }
-
-            let html = '';
-            
-            for (let i = 0; i < 3; i++) {
-                const student = top3[i];
-                const place = i + 1;
-                const colors = ['gold', 'silver', 'bronze'];
-                const trophyColors = ['trophy-gold', 'trophy-silver', 'trophy-bronze'];
-                const pointColors = ['gold', 'silver', 'bronze'];
-                
-                if (student) {
-                    const emoji = generateStudentEmoji(student.name);
-                    
-                    html += `
-                        <div class="winner-spot place-${place}">
-                            <span class="trophy-icon ${trophyColors[i]}">🏆</span>
-                            <div class="winner-card ${colors[i]}">
-                                <div class="place-number ${colors[i]}">${place}</div>
-                                <div class="winner-emoji">${emoji}</div>
-                                <div class="winner-name">${student.name}</div>
-                                <div class="winner-points ${pointColors[i]}">${student.totalPoints || 0} Pkt</div>
-                                <div class="winner-details">
-                                    <div class="detail-item">
-                                        <i class="fas fa-trophy"></i>
-                                        <span>${student.weeklyWins || 0}</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-crown"></i>
-                                        <span>${student.seasonWins || 0}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    html += `
-                        <div class="winner-spot place-${place}">
-                            <span class="trophy-icon ${trophyColors[i]}">🏆</span>
-                            <div class="winner-card ${colors[i]}">
-                                <div class="place-number ${colors[i]}">${place}</div>
-                                <div class="winner-emoji">❓</div>
-                                <div class="winner-name">Noch frei</div>
-                                <div class="winner-points ${pointColors[i]}">0 Pkt</div>
-                                <div class="winner-details">
-                                    <div class="detail-item">
-                                        <i class="fas fa-trophy"></i>
-                                        <span>0</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-crown"></i>
-                                        <span>0</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-
-            document.getElementById('topWinners').innerHTML = html;
-        }
-
-        // Einfache Emoji-Generation
-        function generateStudentEmoji(name) {
-            const emojis = ['🎯', '🚀', '⭐', '💎', '🔥', '🌟', '⚡', '🎨', '🎪', '🎭'];
-            return emojis[name.length % emojis.length];
         }
 
         // Champions Podium rendern
@@ -1971,8 +1955,85 @@
                 `;
             });
 
+            // Größte Steigerung Champions
+            const improvementChampions = calculateSeasonImprovement();
+            
+            let improvementHtml = '';
+            improvementChampions.forEach((student, index) => {
+                const rank = index + 1;
+                let rankClass = '';
+                let medalIcon = '';
+                
+                if (rank === 1) {
+                    rankClass = 'rank-1';
+                    medalIcon = '🥇';
+                } else if (rank === 2) {
+                    rankClass = 'rank-2';
+                    medalIcon = '🥈';
+                } else if (rank === 3) {
+                    rankClass = 'rank-3';
+                    medalIcon = '🥉';
+                } else {
+                    medalIcon = `${rank}.`;
+                }
+                
+                const improvementText = student.improvement > 0 ? 
+                    `+${student.improvement} Pkt Steigerung` : 
+                    student.improvement < 0 ? 
+                    `${student.improvement} Pkt Rückgang` : 
+                    'Keine Änderung';
+                
+                improvementHtml += `
+                    <div class="champion-card">
+                        <div class="champion-rank ${rankClass}">${medalIcon}</div>
+                        <div class="champion-info">
+                            <div class="champion-name">${student.name}</div>
+                            <div class="champion-stats">${improvementText}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
             document.getElementById('weeklyChampions').innerHTML = weeklyHtml || '<p style="text-align: center; opacity: 0.7;">Noch keine Daten verfügbar</p>';
             document.getElementById('seasonChampions').innerHTML = seasonHtml || '<p style="text-align: center; opacity: 0.7;">Noch keine Daten verfügbar</p>';
+            document.getElementById('improvementChampions').innerHTML = improvementHtml || '<p style="text-align: center; opacity: 0.7;">Noch keine Daten verfügbar</p>';
+        }
+
+        // Berechnet die Season-zu-Season Steigerung
+        function calculateSeasonImprovement() {
+            const studentsWithImprovement = [];
+            
+            dashboardData.students.forEach(student => {
+                const completedSeasons = dashboardData.seasons.filter(season => 
+                    season.weeksCompleted === 6 && season.seasonRankings[student.id]
+                );
+                
+                if (completedSeasons.length >= 2) {
+                    // Sortiere Seasons chronologisch
+                    completedSeasons.sort((a, b) => a.id - b.id);
+                    
+                    // Vergleiche letzte abgeschlossene Season mit vorletzter
+                    const lastSeason = completedSeasons[completedSeasons.length - 1];
+                    const previousSeason = completedSeasons[completedSeasons.length - 2];
+                    
+                    const lastPoints = lastSeason.seasonRankings[student.id]?.points || 0;
+                    const previousPoints = previousSeason.seasonRankings[student.id]?.points || 0;
+                    
+                    const improvement = lastPoints - previousPoints;
+                    
+                    studentsWithImprovement.push({
+                        ...student,
+                        improvement: improvement,
+                        lastSeasonPoints: lastPoints,
+                        previousSeasonPoints: previousPoints
+                    });
+                }
+            });
+            
+            // Sortiere nach größter Steigerung
+            return studentsWithImprovement
+                .sort((a, b) => b.improvement - a.improvement)
+                .slice(0, 5);
         }
 
         // Season wechseln
