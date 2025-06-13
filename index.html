@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klassenwettkampf Rangliste</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+
+        :root {
+            --primary-gradient: linear-gradient(135deg, #6A11CB 0%, #2575FC 100%); /* Lila-Blau */
+            --secondary-gradient: linear-gradient(135deg, #FFD700 0%, #FFA000 100%); /* Gold */
+            --text-color: #f0f0f0;
+            --background-dark: #1a1a2e;
+            --card-background: rgba(255, 255, 255, 0.1);
+            --border-color: rgba(255, 255, 255, 0.2);
+            --success-color: #28a745; /* Grün für "Erledigt" und Rangaufstieg */
+            --warning-color: #ffc107; /* Orange für "Als Nächstes" */
+            --danger-color: #dc3545; /* Rot für Rangabstieg */
+            --info-color: #17a2b8; /* Blau für neutrale Infos */
+            --neutral-color: #6c757d; /* Grau für "Gesperrt" und keine Änderung */
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            background: var(--primary-gradient);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            flex-grow: 1;
+        }
+
+        header {
+            background: var(--background-dark);
+            padding: 30px 0;
+            text-align: center;
+            border-bottom: 3px solid var(--border-color);
+            position: relative;
+            overflow: hidden; /* To contain trophy animations */
+        }
+
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 5px;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 1.2em;
+            color: #ccc;
+        }
+
+        .trophy-icon {
+            font-size: 5em;
+            color: #FFD700;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            animation: float 3s ease-in-out infinite alternate;
+        }
+
+        .trophy-left {
+            left: 5%;
+            animation-delay: 0.5s;
+        }
+
+        .trophy-right {
+            right: 5%;
+            animation-delay: 0s;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(-50%) rotate(0deg); }
+            100% { transform: translateY(-60%) rotate(5deg); }
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            margin-top: 20px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+            padding: 5px;
+        }
+
+        .tabs::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+
+        .tab-button {
+            background: transparent;
+            border: none;
+            padding: 15px 25px;
+            color: var(--text-color);
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            white-space: nowrap;
+            border-radius: 8px; /* Rounded corners for buttons */
+        }
+
+        .tab-button.active {
+            background: var(--primary-gradient);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .tab-button:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .tab-content {
+            background: var(--card-background);
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none; /* Hidden by default */
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* General Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners for content */
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        th {
+            background: rgba(0,0,0,0.3);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:nth-child(even) {
+            background: rgba(0,0,0,0.1);
+        }
+
+        .place-medal {
+            font-size: 1.2em;
+            margin-right: 5px;
+        }
+
+        .medal-gold { color: #FFD700; }
+        .medal-silver { color: #C0C0C0; }
+        .medal-bronze { color: #CD7F32; }
+
+        .rank-change {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+
+        .rank-up { color: var(--success-color); }
+        .rank-down { color: var(--danger-color); }
+        .rank-same { color: var(--neutral-color); }
+        .rank-new { color: var(--info-color); }
+
+        .rank-change span {
+            margin-left: 5px;
+        }
+
+        /* Input and Button Styling */
+        .input-group {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            margin-bottom: 20px;
+            gap: 10px; /* Space between items */
+            align-items: center;
+        }
+
+        .input-group input[type="text"] {
+            flex-grow: 1; /* Allows input to take available space */
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-color);
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            min-width: 150px; /* Ensure it's not too small on mobile */
+        }
+
+        .input-group input[type="text"]:focus {
+            border-color: #2575FC;
+            box-shadow: 0 0 8px rgba(37, 117, 252, 0.5);
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            font-weight: 600;
+            white-space: nowrap; /* Prevent button text from wrapping */
+        }
+
+        .btn-primary {
+            background: var(--secondary-gradient);
+            color: var(--background-dark);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+        }
+
+        .btn-secondary {
+            background: var(--background-dark);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .btn-disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: var(--neutral-color);
+            color: #aaa;
+            box-shadow: none;
+        }
+
+        .btn-disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Statistics Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card h3 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #FFD700;
+        }
+
+        .stat-card p {
+            font-size: 2.2em;
+            font-weight: 700;
+            margin: 10px 0 0;
+        }
+
+        /* Season Specific Styles */
+        .season-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            gap: 15px;
+        }
+
+        .season-header h2 {
+            margin: 0;
+            font-size: 1.8em;
+            color: #FFD700;
+        }
+
+        .week-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .week-button {
+            padding: 10px 18px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+            color: var(--text-color);
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .week-button.status-completed {
+            background: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .week-button.status-next {
+            background: var(--warning-color);
+            border-color: var(--warning-color);
+            color: var(--background-dark);
+        }
+
+        .week-button.status-locked {
+            background: var(--neutral-color);
+            border-color: var(--neutral-color);
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .week-button:hover:not(.status-locked) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            background-color: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            height: 25px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--secondary-gradient);
+            border-radius: 10px;
+            transition: width 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.9em;
+            color: var(--background-dark);
+        }
+
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: var(--text-color);
+            font-size: 0.9em;
+            line-height: 25px; /* Vertically center text */
+        }
+
+        /* Points Input Table specific styles */
+        .points-input-section {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none; /* Hidden by default */
+        }
+
+        .points-input-section h3 {
+            margin-top: 0;
+            color: #FFD700;
+        }
+
+        .points-input-table td {
+            vertical-align: middle;
+        }
+
+        .points-input-table input[type="number"] {
+            width: 80px;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-color);
+            font-size: 0.9em;
+            outline: none;
+            text-align: center;
+            transition: border-color 0.3s ease;
+        }
+
+        .points-input-table input[type="number"]:focus {
+            border-color: #2575FC;
+        }
+
+        .points-input-table .live-place {
+            font-weight: 600;
+            padding-left: 10px;
+            white-space: nowrap; /* Prevent wrapping */
+        }
+
+        .points-input-table .live-place .medal-icon {
+            font-size: 1.1em;
+            margin-right: 5px;
+        }
+
+        .points-input-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.2em;
+            }
+            header p {
+                font-size: 1em;
+            }
+            .trophy-icon {
+                font-size: 3em;
+            }
+            .tabs {
+                justify-content: flex-start; /* Align tabs to start on smaller screens */
+            }
+            .tab-button {
+                padding: 12px 18px;
+                font-size: 1em;
+            }
+            .container {
+                margin: 10px auto;
+                padding: 0 10px;
+            }
+            .tab-content {
+                padding: 15px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr; /* Stack cards on very small screens */
+            }
+            .input-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .input-group input[type="text"] {
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .btn {
+                width: 100%;
+            }
+            .week-buttons {
+                justify-content: center;
+            }
+            th, td {
+                padding: 8px 10px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="trophy-icon trophy-left">🏆</div>
+        <h1>Klassenwettkampf</h1>
+        <p>Verfolge die Rangliste deiner Klasse</p>
+        <div class="trophy-icon trophy-right">🏆</div>
+    </header>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.5em;
+        z-index: 1001;
+    ">
+        Lade Daten...
+    </div>
+
+    <!-- User ID Display -->
+    <div id="userIdDisplay" style="text-align: center; margin-top: 10px; font-size: 0.9em; color: rgba(255,255,255,0.7);">
+        Lade Benutzer-ID...
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('overall')">🏆 Gesamtrangliste</button>
+            <button class="tab-button" onclick="showTab('season1')">📊 Season 1</button>
+            <button class="tab-button" onclick="showTab('season2')">📊 Season 2</button>
+            <button class="tab-button" onclick="showTab('season3')">📊 Season 3</button>
+            <button class="tab-button" onclick="showTab('season4')">📊 Season 4</button>
+            <button class="tab-button" onclick="showTab('season5')">📊 Season 5</button>
+        </div>
+
+        <!-- Overall Ranking Tab Content -->
+        <div id="overall" class="tab-content active">
+            <h2>Gesamtrangliste</h2>
+            <div class="input-group">
+                <input type="text" id="newStudentName" placeholder="Neuen Schüler hinzufügen" onkeydown="if(event.key === 'Enter') addStudent()">
+                <button class="btn btn-primary" onclick="addStudent()">Schüler hinzufügen</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Teilnehmer</h3>
+                    <p id="statTotalStudents">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Wochen gespielt</h3>
+                    <p id="statWeeksPlayed">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Seasons abgeschlossen</h3>
+                    <p id="statSeasonsCompleted">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Wochensieger total</h3>
+                    <p id="statWeeklyWinnersTotal">0</p>
+                </div>
+            </div>
+
+            <table id="overallRankingTable">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th>Name</th>
+                        <th>Gesamtpunkte</th>
+                        <th>🥇 Wochensiege</th>
+                        <th>🏆 Season-Siege</th>
+                        <th>📈 Änderung</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Ranking rows will be injected here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Season Tabs Content (Templates) -->
+        <div id="season1" class="tab-content"></div>
+        <div id="season2" class="tab-content"></div>
+        <div id="season3" class="tab-content"></div>
+        <div id="season4" class="tab-content"></div>
+        <div id="season5" class="tab-content"></div>
+    </div>
+
+    <!-- Message Box for Alerts -->
+    <div id="messageBox" style="
+        display: none;
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        font-size: 1.1em;
+        text-align: center;
+    ">
+        <span id="messageBoxText"></span>
+    </div>
+
+    <script>
+        // In-Memory Storage für alle Daten
+        let appData = {
+            students: [], // [{ id: 'uuid', name: 'Schüler A', totalPoints: 0, weeklyWins: 0, seasonWins: 0, overallPreviousRank: null }]
+            seasons: [
+                { id: 1, name: 'Season 1', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                { id: 2, name: 'Season 2', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                { id: 3, name: 'Season 3', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                { id: 4, name: 'Season 4', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                { id: 5, name: 'Season 5', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} }
+            ],
+            currentSeasonId: 1,
+            activeTab: 'overall',
+            // Punktevergabe nach Platzierung
+            POINTS_SYSTEM: { 1: 15, 2: 10, 3: 6, 4: 3, 5: 1 }
+        };
+
+        // Global Firebase variables (will be initialized later)
+        let app;
+        let db;
+        let auth;
+        let userId = 'loading...'; // Placeholder until authenticated
+
+        // Firebase Konfiguration - HIER WURDE IHRE KONFIGURATION EINGEFÜGT
+        const firebaseConfig = {
+            apiKey: "AIzaSyAvwY8kQ3dAQmusJk3tyL933OdCNfwQftA",
+            authDomain: "klassenwettkampf.firebaseapp.com",
+            databaseURL: "https://klassenwettkampf-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "klassenwettkampf",
+            storageBucket: "klassenwettkampf.firebasestorage.app",
+            messagingSenderId: "443034704823",
+            appId: "1:443034704823:web:d6ac43758c7567a1fda632",
+            measurementId: "G-K3SN76DC0L"
+        };
+
+        const __app_id = firebaseConfig.projectId; // Verwende projectId als eindeutige App-ID für Firestore-Pfad
+        const __firebase_config = firebaseConfig; // Verwende die direkte Konfiguration
+
+        // Hilfsfunktion zum Anzeigen von Nachrichten
+        function showMessage(text, duration = 3000) {
+            const messageBox = document.getElementById('messageBox');
+            const messageBoxText = document.getElementById('messageBoxText');
+            messageBoxText.textContent = text;
+            messageBox.style.display = 'block';
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, duration);
+        }
+
+        // UUID Generator (vereinfacht, für reale Anwendungen UUID v4 verwenden)
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // Firebase initialization and authentication
+        async function initFirebase() {
+            document.getElementById('loadingIndicator').style.display = 'flex'; // Show loading
+            console.log('Initializing Firebase...');
+            
+            if (Object.keys(__firebase_config).length === 0 || !__firebase_config.apiKey) {
+                console.warn('Firebase-Konfiguration ist leer oder unvollständig. Daten werden nicht gespeichert oder geladen.');
+                showMessage('Firebase ist nicht konfiguriert. Daten werden nicht gespeichert.', 5000);
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('userIdDisplay').textContent = 'Firebase nicht konfiguriert';
+                // Render UI with default in-memory data
+                appData.seasons.forEach(season => {
+                    renderSeasonDetails(season);
+                });
+                initializeUI();
+                return;
+            }
+
+            try {
+                app = firebase.initializeApp(__firebase_config);
+                db = firebase.firestore.getFirestore(app);
+                auth = firebase.auth.getAuth(app);
+
+                // Authenticate
+                // __initial_auth_token is provided by the Canvas environment for authenticated sessions.
+                // If deploying to GitHub, you'd handle auth differently (e.g., email/password, Google sign-in).
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                if (initialAuthToken) {
+                    await firebase.auth.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await firebase.auth.signInAnonymously(auth);
+                }
+
+                // Listen for auth state changes and then load data
+                firebase.auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = `Benutzer-ID: ${userId}`;
+                        console.log('Firebase initialisiert und Benutzer authentifiziert:', userId);
+                        await loadDataFromFirestore(); // Load data after authentication
+                        startRealtimeListener(); // Start listening for changes
+                        document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading
+                    } else {
+                        console.log('Benutzer ist abgemeldet oder Authentifizierung fehlgeschlagen.');
+                        document.getElementById('userIdDisplay').textContent = 'Benutzer nicht authentifiziert.';
+                        document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading
+                        // Render UI with default in-memory data if no user
+                        appData.seasons.forEach(season => {
+                            renderSeasonDetails(season);
+                        });
+                        initializeUI();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Fehler bei der Firebase-Initialisierung oder Authentifizierung:", error);
+                showMessage(`Fehler: ${error.message}`, 5000);
+                document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading on error
+                document.getElementById('userIdDisplay').textContent = 'Fehler bei Firebase-Init';
+                // Render UI with default in-memory data on error
+                appData.seasons.forEach(season => {
+                    renderSeasonDetails(season);
+                });
+                initializeUI();
+            }
+        }
+
+        async function saveDataToFirestore() {
+            if (!db || !userId || userId === 'loading...') { // Check if db and userId are ready
+                console.warn("Firestore oder User ID nicht verfügbar. Speichern nicht möglich.");
+                return;
+            }
+            try {
+                // Pfad: /artifacts/{appId}/users/{userId}/rankings/data
+                const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+                await firebase.firestore.setDoc(docRef, appData);
+                console.log("Daten erfolgreich in Firestore gespeichert.");
+            } catch (error) {
+                console.error("Fehler beim Speichern der Daten in Firestore:", error);
+                showMessage(`Fehler beim Speichern: ${error.message}`, 5000);
+            }
+        }
+
+        async function loadDataFromFirestore() {
+            if (!db || !userId || userId === 'loading...') { // Check if db and userId are ready
+                console.warn("Firestore oder User ID nicht verfügbar. Laden nicht möglich.");
+                return;
+            }
+            try {
+                const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+                const docSnap = await firebase.firestore.getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const loadedData = docSnap.data();
+                    // Tiefenvergleich, um unnötige UI-Updates bei initialem Laden zu vermeiden
+                    if (JSON.stringify(appData) !== JSON.stringify(loadedData)) {
+                        appData = loadedData;
+                        console.log("Daten erfolgreich aus Firestore geladen.");
+                        // Re-render UI based on loaded data
+                        // Ensure all season details are rendered before overall UI
+                        appData.seasons.forEach(season => {
+                            renderSeasonDetails(season);
+                        });
+                        initializeUI(); // Re-render everything after loading data
+                        showMessage("Daten aus Cloud geladen.", 3000);
+                    } else {
+                        console.log("Geladene Daten sind identisch mit lokalen Daten.");
+                        // Still need to ensure UI is rendered if it's the initial load
+                        appData.seasons.forEach(season => {
+                            renderSeasonDetails(season);
+                        });
+                        initializeUI();
+                    }
+                } else {
+                    console.log("Keine Daten in Firestore gefunden. Initialisiere mit Standarddaten.");
+                    // If no data, initialize with default, then save it.
+                    saveDataToFirestore(); // Save initial data
+                    // Render UI with default data
+                    appData.seasons.forEach(season => {
+                        renderSeasonDetails(season);
+                    });
+                    initializeUI();
+                }
+            } catch (error) {
+                console.error("Fehler beim Laden der Daten aus Firestore:", error);
+                showMessage(`Fehler beim Laden: ${error.message}`, 5000);
+            }
+        }
+
+        // Start Realtime Listener
+        function startRealtimeListener() {
+            if (!db || !userId || userId === 'loading...') return;
+
+            const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+
+            firebase.firestore.onSnapshot(docRef, (doc) => {
+                if (doc.exists()) {
+                    const newData = doc.data();
+                    // Prevent infinite loops if this update itself triggers another save
+                    // Only update appData if there are actual changes and it's not our own save.
+                    if (JSON.stringify(appData) !== JSON.stringify(newData)) {
+                        appData = newData;
+                        console.log("Realtime-Update von Firestore erhalten.");
+                        // Re-render UI on changes
+                        appData.seasons.forEach(season => {
+                            renderSeasonDetails(season);
+                        });
+                        initializeUI();
+                    }
+                } else {
+                    console.log("Dokument existiert nicht, eventuell gelöscht oder noch nicht initialisiert.");
+                    // If document is deleted externally, reset local data
+                    appData = {
+                        students: [],
+                        seasons: [
+                            { id: 1, name: 'Season 1', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                            { id: 2, name: 'Season 2', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                            { id: 3, name: 'Season 3', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                            { id: 4, name: 'Season 4', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
+                            { id: 5, name: 'Season 5', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} }
+                        ],
+                        currentSeasonId: 1,
+                        activeTab: 'overall',
+                        POINTS_SYSTEM: { 1: 15, 2: 10, 3: 6, 4: 3, 5: 1 }
+                    };
+                    appData.seasons.forEach(season => {
+                        renderSeasonDetails(season);
+                    });
+                    initializeUI();
+                    showMessage("Daten in Firestore zurückgesetzt oder gelöscht.", 3000);
+                }
+            }, (error) => {
+                console.error("Fehler beim Abonnieren von Realtime-Updates:", error);
+                showMessage(`Realtime-Update Fehler: ${error.message}`, 5000);
+            });
+        }
+
+
+        // Initialisiert die UI basierend auf den Daten
+        function initializeUI() {
+            renderOverallRanking();
+            // Stellt sicher, dass der aktive Tab beim Laden angezeigt wird
+            showTab(appData.activeTab, false);
+        }
+
+        // Wechselt zwischen den Tabs
+        function showTab(tabId, updateActive = true) {
+            // Versteckt alle Tab-Inhalte
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            // Entfernt den aktiven Zustand von allen Tab-Buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+
+            // Zeigt den ausgewählten Tab-Inhalt an
+            document.getElementById(tabId).classList.add('active');
+
+            // Setzt den ausgewählten Tab-Button als aktiv
+            const tabButton = document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`);
+            if (tabButton) {
+                tabButton.classList.add('active');
+            }
+
+            if (updateActive) {
+                appData.activeTab = tabId;
+            }
+
+            // Wenn es ein Season-Tab ist, die Season-Details rendern
+            if (tabId.startsWith('season')) {
+                const seasonIndex = parseInt(tabId.replace('season', '')) - 1;
+                if (appData.seasons[seasonIndex]) {
+                    renderSeasonDetails(appData.seasons[seasonIndex]);
+                }
+            }
+        }
+
+        // Fügt einen neuen Schüler hinzu
+        function addStudent() {
+            const inputElement = document.getElementById('newStudentName');
+            const studentName = inputElement.value.trim();
+
+            if (studentName === '') {
+                showMessage('Bitte geben Sie einen Namen für den Schüler ein.');
+                return;
+            }
+
+            if (appData.students.some(s => s.name.toLowerCase() === studentName.toLowerCase())) {
+                showMessage('Ein Schüler mit diesem Namen existiert bereits.');
+                return;
+            }
+
+            const newStudent = {
+                id: generateUUID(),
+                name: studentName,
+                totalPoints: 0,
+                weeklyWins: 0,
+                seasonWins: 0,
+                overallPreviousRank: null // Für Rangänderungen
+            };
+            appData.students.push(newStudent);
+            inputElement.value = ''; // Eingabefeld leeren
+            renderOverallRanking();
+            updateStatistics();
+            saveDataToFirestore(); // <-- Speichern nach Hinzufügen
+            showMessage(`Schüler "${studentName}" hinzugefügt.`);
+        }
+
+        // Rendert die Gesamtrangliste
+        function renderOverallRanking() {
+            const tableBody = document.getElementById('overallRankingTable').querySelector('tbody');
+            tableBody.innerHTML = ''; // Vorherige Einträge löschen
+
+            // Speichern der alten Ränge für die Berechnung der Rangänderung
+            const previousRanks = {};
+            appData.students.forEach(s => {
+                if (s.overallPreviousRank !== null) {
+                    previousRanks[s.id] = s.overallPreviousRank;
+                }
+            });
+
+            // Sortiert Schüler nach Gesamtpunkten absteigend
+            const sortedStudents = [...appData.students].sort((a, b) => b.totalPoints - a.totalPoints);
+
+            sortedStudents.forEach((student, index) => {
+                const currentRank = index + 1;
+                let rankChangeHtml = '';
+
+                if (previousRanks[student.id] !== undefined) {
+                    const oldRank = previousRanks[student.id];
+                    if (currentRank < oldRank) {
+                        const diff = oldRank - currentRank;
+                        rankChangeHtml = `<span class="rank-change rank-up">↗️ +${diff}</span>`;
+                    } else if (currentRank > oldRank) {
+                        const diff = currentRank - oldRank;
+                        rankChangeHtml = `<span class="rank-change rank-down">↘️ -${diff}</span>`;
+                    } else {
+                        rankChangeHtml = `<span class="rank-change rank-same">➡️ ±0</span>`;
+                    }
+                } else if (student.overallPreviousRank === null && appData.seasons[0].weeklyResults.length > 0) {
+                    // Wenn der Schüler neu in der Rangliste erscheint (nicht neu in der App)
+                    rankChangeHtml = `<span class="rank-change rank-new">🆕 NEU</span>`;
+                }
+
+
+                // Aktualisiere den PreviousRank für die nächste Woche
+                student.overallPreviousRank = currentRank;
+
+                const row = tableBody.insertRow();
+                row.innerHTML = `
+                    <td>${currentRank}</td>
+                    <td>${student.name}</td>
+                    <td>${student.totalPoints}</td>
+                    <td>${student.weeklyWins}</td>
+                    <td>${student.seasonWins}</td>
+                    <td>${rankChangeHtml}</td>
+                `;
+            });
+            updateStatistics();
+        }
+
+        // Aktualisiert die Statistik-Karten
+        function updateStatistics() {
+            document.getElementById('statTotalStudents').textContent = appData.students.length;
+
+            let totalWeeksPlayed = 0;
+            let totalSeasonsCompleted = 0;
+            let totalWeeklyWinners = 0; // Will be summed from student.weeklyWins
+
+            appData.seasons.forEach(season => {
+                totalWeeksPlayed += season.weeksCompleted;
+                if (season.winnerId && season.winnerId !== 'tied') { // Zählt nur Seasons mit einem eindeutigen Gewinner
+                    totalSeasonsCompleted++;
+                }
+            });
+            
+            // Summiert die weeklyWins aller Schüler für "Wochensieger total"
+            totalWeeklyWinners = appData.students.reduce((sum, student) => sum + student.weeklyWins, 0);
+
+            document.getElementById('statWeeksPlayed').textContent = totalWeeksPlayed;
+            document.getElementById('statSeasonsCompleted').textContent = totalSeasonsCompleted;
+            document.getElementById('statWeeklyWinnersTotal').textContent = totalWeeklyWinners;
+        }
+
+        // Rendert den Inhalt eines Season-Tabs
+        function renderSeasonDetails(season) {
+            const seasonContentDiv = document.getElementById(`season${season.id}`);
+            // Stellen Sie sicher, dass der Div existiert, bevor Sie ihn manipulieren
+            if (!seasonContentDiv) {
+                console.error(`Season content div for season${season.id} not found.`);
+                return;
+            }
+
+            seasonContentDiv.innerHTML = `
+                <div class="season-header">
+                    <h2>${season.name}</h2>
+                </div>
+                <div class="week-buttons" id="weekButtonsSeason${season.id}">
+                    <!-- Week buttons will be generated here -->
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBarSeason${season.id}"></div>
+                    <div class="progress-text" id="progressTextSeason${season.id}"></div>
+                </div>
+
+                <div class="points-input-section" id="pointsInputSectionSeason${season.id}">
+                    <h3>Punkte für Woche ${season.currentWeek} eingeben</h3>
+                    <table class="points-input-table">
+                        <thead>
+                            <tr>
+                                <th>Schüler</th>
+                                <th>Punkte</th>
+                                <th>Platz (Live)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pointsInputTableBodySeason${season.id}">
+                            <!-- Input rows for students will be generated here -->
+                        </tbody>
+                    </table>
+                    <div class="points-input-actions">
+                        <button class="btn btn-secondary" onclick="cancelPointsInput(${season.id})">Abbrechen</button>
+                        <button class="btn btn-primary" onclick="saveWeeklyResults(${season.id})">Speichern</button>
+                    </div>
+                </div>
+
+                <h3>Aktuelle Season-Rangliste</h3>
+                <table id="seasonRankingTable${season.id}">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Name</th>
+                            <th>Season Punkte</th>
+                            <th>📈 Änderung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Season Ranking rows will be injected here -->
+                    </tbody>
+                </table>
+            `;
+
+            renderWeekButtons(season);
+            updateProgressBar(season);
+            renderSeasonRankingTable(season);
+
+            // Hide input section by default
+            document.getElementById(`pointsInputSectionSeason${season.id}`).style.display = 'none';
+        }
+
+        // Rendert die Wochen-Buttons für eine Season
+        function renderWeekButtons(season) {
+            const weekButtonsDiv = document.getElementById(`weekButtonsSeason${season.id}`);
+            if (!weekButtonsDiv) {
+                console.error(`Week buttons div for Season ${season.id} not found.`);
+                return;
+            }
+            weekButtonsDiv.innerHTML = '';
+
+            for (let i = 1; i <= 6; i++) {
+                let statusClass = '';
+                let buttonIcon = '';
+                let onClickAction = '';
+                let isDisabled = false;
+
+                if (i < season.currentWeek) {
+                    statusClass = 'status-completed';
+                    buttonIcon = '✅';
+                    onClickAction = `editWeeklyResults(${season.id}, ${i})`; // Erlaubt Bearbeitung abgeschlossener Wochen
+                } else if (i === season.currentWeek) {
+                    statusClass = 'status-next';
+                    buttonIcon = '▶️';
+                    onClickAction = `startPointsInput(${season.id}, ${i})`;
+                } else {
+                    statusClass = 'status-locked';
+                    buttonIcon = '🔒';
+                    isDisabled = true;
+                }
+
+                const button = document.createElement('button');
+                button.className = `week-button ${statusClass}`;
+                button.innerHTML = `${buttonIcon} Woche ${i}`;
+                if (onClickAction) {
+                    button.setAttribute('onclick', onClickAction);
+                }
+                button.disabled = isDisabled;
+                weekButtonsDiv.appendChild(button);
+            }
+        }
+
+        // Aktualisiert die Fortschrittsanzeige für eine Season
+        function updateProgressBar(season) {
+            const progressBar = document.getElementById(`progressBarSeason${season.id}`);
+            const progressText = document.getElementById(`progressTextSeason${season.id}`);
+            if (!progressBar || !progressText) return; // Add null check
+
+            const percentage = (season.weeksCompleted / 6) * 100;
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = `${season.weeksCompleted}/6 Wochen`;
+            // CSS Variables müssen direkt als String gesetzt werden, nicht als JS-Variable var_secondary_gradient
+            if (percentage === 100) {
+                progressBar.style.background = 'linear-gradient(135deg, #FFD700 0%, #FFA000 100%)'; /* Gold, wenn abgeschlossen */
+            } else {
+                progressBar.style.background = 'linear-gradient(135deg, #6A11CB 0%, #2575FC 100%)';
+            }
+        }
+
+        // Startet die Punkteingabe für eine Woche
+        function startPointsInput(seasonId, weekNum) {
+            const season = appData.seasons.find(s => s.id === seasonId);
+            if (!season || weekNum !== season.currentWeek) {
+                showMessage('Diese Woche ist entweder abgeschlossen oder noch nicht freigeschaltet.');
+                return;
+            }
+
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'block';
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).querySelector('h3').textContent = `Punkte für Woche ${weekNum} eingeben`;
+            populatePointsInputTable(seasonId);
+        }
+
+        // Befüllt die Punkteingabetabelle
+        function populatePointsInputTable(seasonId) {
+            const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
+            tableBody.innerHTML = ''; // Vorherige Einträge löschen
+
+            appData.students.forEach(student => {
+                const row = tableBody.insertRow();
+                row.setAttribute('data-student-id', student.id);
+                row.innerHTML = `
+                    <td>${student.name}</td>
+                    <td><input type="number" min="0" value="0" oninput="updateLivePlace(${seasonId}, this)"></td>
+                    <td class="live-place"></td>
+                `;
+            });
+            // Initial update for all rows, passing the row itself to the function
+            tableBody.querySelectorAll('input[type="number"]').forEach(input => {
+                updateLivePlace(seasonId, input);
+            });
+        }
+
+        // Bearbeitet die Ergebnisse einer abgeschlossenen Woche
+        function editWeeklyResults(seasonId, weekNum) {
+            const season = appData.seasons.find(s => s.id === seasonId);
+            if (!season || !season.weeklyResults[weekNum - 1]) {
+                showMessage('Wochenergebnisse für diese Woche nicht gefunden.');
+                return;
+            }
+
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'block';
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).querySelector('h3').textContent = `Ergebnisse für Woche ${weekNum} bearbeiten`;
+            populatePointsInputTableForEdit(seasonId, weekNum);
+        }
+
+        // Befüllt die Punkteingabetabelle mit vorhandenen Daten für die Bearbeitung
+        function populatePointsInputTableForEdit(seasonId, weekNum) {
+            const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
+            tableBody.innerHTML = '';
+
+            const weeklyData = season.weeklyResults[weekNum - 1]; // Array von { studentId, points, place }
+
+            appData.students.forEach(student => {
+                const existingEntry = weeklyData.find(entry => entry.studentId === student.id);
+                const points = existingEntry ? existingEntry.points : 0;
+
+                const row = tableBody.insertRow();
+                row.setAttribute('data-student-id', student.id);
+                row.innerHTML = `
+                    <td>${student.name}</td>
+                    <td><input type="number" min="0" value="${points}" oninput="updateLivePlace(${seasonId}, this)"></td>
+                    <td class="live-place"></td>
+                `;
+            });
+            // Initial update for all rows after populating for edit
+            tableBody.querySelectorAll('input[type="number"]').forEach(input => {
+                updateLivePlace(seasonId, input);
+            });
+        }
+
+        // Hilfsfunktion zur Ermittlung des gruppenbasierten Ranges (für Speicherung und Tabellen)
+        function getGroupedRank(index, groupSize) {
+            return Math.floor(index / groupSize) + 1;
+        }
+
+        // NEUE updateLivePlace Funktion: Basierend auf den eingegebenen Punkten
+        function updateLivePlace(seasonId, inputElement) {
+            const points = parseInt(inputElement.value) || 0;
+            const livePlaceCell = inputElement.closest('tr').querySelector('.live-place');
+
+            let medal = '';
+            let placeText = '';
+
+            // Feste Zuordnung basierend auf eingegebenen Punkten
+            if (points === 15) {
+                placeText = '1. Platz';
+                medal = '<span class="place-medal medal-gold">🥇</span>';
+            } else if (points === 10) {
+                placeText = '2. Platz';
+                medal = '<span class="place-medal medal-silver">🥈</span>';
+            } else if (points === 6) {
+                placeText = '3. Platz';
+                medal = '<span class="place-medal medal-bronze">🥉</span>';
+            } else if (points === 3) {
+                placeText = '4. Platz';
+            } else if (points === 1) {
+                placeText = '5. Platz';
+            } else {
+                placeText = 'Kein Platz'; // Oder "0 Punkte" je nach Wunsch
+            }
+
+            livePlaceCell.innerHTML = `${medal}${placeText}`;
+        }
+
+        // Speichert die wöchentlichen Ergebnisse
+        function saveWeeklyResults(seasonId) {
+            const season = appData.seasons.find(s => s.id === seasonId);
+            if (!season) return;
+
+            const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
+            const weeklyResults = []; // [{ studentId: 'uuid', points: 10, place: 1, pointsAwarded: 15 }]
+
+            // Sammelt Punkte von allen Schülern
+            const studentScores = [];
+            tableBody.querySelectorAll('tr').forEach(row => {
+                const studentId = row.getAttribute('data-student-id');
+                const pointsInput = row.querySelector('input[type="number"]');
+                const points = parseInt(pointsInput.value) || 0;
+                studentScores.push({ studentId, points });
+            });
+
+            // Sortiert nach eingegebenen Punkten (absteigend) für die tatsächliche Rangierung
+            studentScores.sort((a, b) => b.points - a.points);
+
+            // Die tatsächliche Platzierung (gruppenbasiert) und Punktevergabe
+            for (let i = 0; i < studentScores.length; i++) {
+                const entry = studentScores[i];
+                const currentPlace = getGroupedRank(i, 4); // Gruppenbasierter Rang für Speicherung
+
+                let pointsAwarded = 0;
+                if (appData.POINTS_SYSTEM[currentPlace]) {
+                    pointsAwarded = appData.POINTS_SYSTEM[currentPlace];
+                }
+
+                weeklyResults.push({
+                    studentId: entry.studentId,
+                    points: entry.points, // die direkt eingegebenen Punkte
+                    place: currentPlace,  // der berechnete gruppenbasierte Platz
+                    pointsAwarded: pointsAwarded // die Punkte aus dem System
+                });
+            }
+
+            const currentSeason = season;
+            const weekIndex = currentSeason.currentWeek - 1; // 0-basiert
+
+            if (currentSeason.weeklyResults[weekIndex]) {
+                // Dies ist eine Bearbeitung einer alten Woche
+                currentSeason.weeklyResults[weekIndex] = weeklyResults;
+                showMessage(`Woche ${season.currentWeek} in Season ${season.id} wurde aktualisiert.`);
+            } else {
+                // Dies ist eine neue Eingabe
+                currentSeason.weeklyResults.push(weeklyResults);
+                currentSeason.weeksCompleted++;
+                showMessage(`Woche ${season.currentWeek} in Season ${season.id} gespeichert.`);
+                currentSeason.currentWeek++; // Nächste Woche freischalten
+            }
+
+            // Neu-Berechnung aller Punkte und Statistiken nach jeder Änderung
+            recalculateAllPointsAndStats();
+
+            // UI aktualisieren
+            renderWeekButtons(season);
+            updateProgressBar(season);
+            renderSeasonRankingTable(season);
+            renderOverallRanking(); // Gesamtrangliste aktualisieren
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'none'; // Eingabesektion verstecken
+        }
+
+        // Funktion zur vollständigen Neuberechnung aller Punkte und Statistiken
+        function recalculateAllPointsAndStats() {
+            // 1. Alle Schülerdaten zurücksetzen (Punkte, Siege)
+            appData.students.forEach(student => {
+                student.totalPoints = 0;
+                student.weeklyWins = 0;
+                student.seasonWins = 0; 
+            });
+
+            // 2. Alle Season-Daten zurücksetzen (Ranglisten, Gewinner)
+            appData.seasons.forEach(season => {
+                season.seasonRankings = {};
+                season.winnerId = null;
+            });
+
+            // 3. Durch alle WeeklyResults iterieren und Punkte sowie Siege neu addieren
+            appData.seasons.forEach(season => {
+                const seasonPointsMap = new Map(); // Punkte für die aktuelle Season
+
+                // Sortiere die weeklyResults nach der ursprünglichen Reihenfolge der Wochen
+                // Dies ist wichtig, da weeklyResults auch bei Bearbeitungen hinzugefügt werden könnten
+                // und die Sortierung nur für die Anzeige/Platzierung pro Woche wichtig ist.
+                // Für die Neuberechnung müssen wir alle gespeicherten Wochen konsistent verarbeiten.
+
+                season.weeklyResults.forEach(weekData => {
+                    weekData.forEach(entry => {
+                        const student = appData.students.find(s => s.id === entry.studentId);
+                        if (student) {
+                            student.totalPoints += entry.pointsAwarded; // Addiere Punkte zur Gesamtsumme
+
+                            // Season-Punkte akkumulieren
+                            seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.studentId) || 0) + entry.pointsAwarded);
+
+                            // Wenn dieser Eintrag ein Wochensieger war (Platz 1 in der aktuellen Wochenwertung), erhöhe weeklyWins
+                            // Der weeklyWins Zähler sollte pro Schüler insgesamt gezählt werden.
+                            // Da student.weeklyWins zu Beginn der Funktion auf 0 gesetzt wird, ist diese Inkrementierung korrekt.
+                            if (entry.place === 1) { // Hier wird der 'place' verwendet, der aus der gruppierten Rangierung kommt
+                                student.weeklyWins++;
+                            }
+                        }
+                    });
+                });
+
+                // Season-Rangliste für diese Season aktualisieren
+                // Zuerst vorherige Ränge speichern (wenn vorhanden)
+                const previousSeasonRanks = {};
+                for (const studentId in season.seasonRankings) {
+                    previousSeasonRanks[studentId] = season.seasonRankings[studentId].rank;
+                }
+
+                // Erstelle eine sortierte Liste der Schüler für diese Season basierend auf kumulierten Season-Punkten
+                const sortedSeasonStudents = appData.students.map(s => ({
+                    id: s.id,
+                    points: seasonPointsMap.get(s.id) || 0
+                })).sort((a, b) => b.points - a.points);
+
+                // Weisen Sie die gruppenbasierten Ränge in der Season-Rangliste zu
+                let currentSeasonPlace = 1;
+                for (let i = 0; i < sortedSeasonStudents.length; i++) {
+                    currentSeasonPlace = getGroupedRank(i, 4); // Auch hier gruppenbasierten Rang verwenden
+                    
+                    const studentId = sortedSeasonStudents[i].id;
+                    const points = sortedSeasonStudents[i].points;
+                    season.seasonRankings[studentId] = {
+                        points: points,
+                        rank: currentSeasonPlace,
+                        previousRank: previousSeasonRanks[studentId] !== undefined ? previousSeasonRanks[studentId] : null
+                    };
+                }
+
+                // Season-Gewinner erneut prüfen (basierend auf den neu berechneten Daten)
+                checkSeasonWinner(season);
+            });
+
+            // Abschließend die Gesamtstatistiken aktualisieren
+            updateStatistics();
+            saveDataToFirestore(); // <-- Speichern nach Neuberechnung
+        }
+
+        // Überprüft und setzt den Season-Gewinner
+        function checkSeasonWinner(season) {
+            // Nur prüfen, wenn alle Wochen abgeschlossen sind und noch kein Gewinner feststeht
+            if (season.weeksCompleted === 6 && !season.winnerId) {
+                // Finde den Schüler mit den höchsten Punkten in dieser Season
+                let seasonWinnerId = null;
+                let maxPoints = -1;
+
+                // Finde den ersten Platz und die Punktzahl
+                let firstPlaceStudents = [];
+                let firstPlacePoints = -1;
+
+                for (const studentId in season.seasonRankings) {
+                    const points = season.seasonRankings[studentId].points;
+                    if (points > firstPlacePoints) {
+                        firstPlacePoints = points;
+                        firstPlaceStudents = [studentId]; // Neue höchste Punktzahl, setze Liste zurück
+                    } else if (points === firstPlacePoints) {
+                        firstPlaceStudents.push(studentId); // Gleichstand
+                    }
+                }
+
+                // Ein Season-Gewinner ist nur, wenn es einen *eindeutigen* 1. Platz gibt.
+                if (firstPlaceStudents.length === 1 && season.seasonRankings[firstPlaceStudents[0]] && season.seasonRankings[firstPlaceStudents[0]].rank === 1) {
+                    season.winnerId = firstPlaceStudents[0];
+                    const winner = appData.students.find(s => s.id === season.winnerId);
+                    if (winner) {
+                        winner.seasonWins++; // Erhöhe den Season-Sieg-Zähler des Schülers
+                        // saveDataToFirestore(); // <-- Speichern nach Season-Sieg (wird von recalculateAllPointsAndStats getriggert)
+                        showMessage(`🎉 ${winner.name} hat Season ${season.id} gewonnen!`, 5000);
+                    }
+                } else if (firstPlaceStudents.length > 1 && season.seasonRankings[firstPlaceStudents[0]] && season.seasonRankings[firstPlaceStudents[0]].rank === 1) {
+                    // Wenn es einen Gleichstand für den 1. Platz gibt (basierend auf dem Gruppensystem ist der Rang 1)
+                    season.winnerId = 'tied'; // Markiere als unentschieden
+                    // saveDataToFirestore(); // <-- Speichern nach Season-Sieg (wird von recalculateAllPointsAndStats getriggert)
+                    showMessage(`🤝 Season ${season.id} endete unentschieden!`, 5000);
+                }
+            }
+        }
+
+
+        // Bricht die Punkteingabe ab
+        function cancelPointsInput(seasonId) {
+            document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'none';
+        }
+
+        // Rendert die Season-Rangliste
+        function renderSeasonRankingTable(season) {
+            const tableBody = document.getElementById(`seasonRankingTable${season.id}`).querySelector('tbody');
+            // Null-Check hinzufügen, falls tableBody nicht gefunden wird
+            if (!tableBody) {
+                console.error(`Season ranking table body for Season ${season.id} not found.`);
+                return;
+            }
+            tableBody.innerHTML = '';
+
+            const studentsWithSeasonPoints = appData.students.map(student => {
+                const seasonData = season.seasonRankings[student.id];
+                return {
+                    ...student,
+                    seasonPoints: seasonData ? seasonData.points : 0,
+                    seasonPreviousRank: seasonData ? seasonData.previousRank : null // Der vorherige Rang in dieser Season
+                };
+            }).sort((a, b) => b.seasonPoints - a.seasonPoints); // Hier weiterhin nach Punkten sortieren
+
+            studentsWithSeasonPoints.forEach((student, index) => {
+                // Der aktuelle Rang sollte aus season.seasonRankings genommen werden, da dort die Gruppierung erfolgt ist
+                const currentRank = season.seasonRankings[student.id] ? season.seasonRankings[student.id].rank : getGroupedRank(index, 4); 
+                let rankChangeHtml = '';
+
+                const previousRank = student.seasonPreviousRank; // Dieser Wert kommt aus der Neuberechnung
+                if (previousRank !== null && previousRank !== undefined) {
+                    if (currentRank < previousRank) {
+                        const diff = previousRank - currentRank;
+                        rankChangeHtml = `<span class="rank-change rank-up">↗️ +${diff}</span>`;
+                    } else if (currentRank > previousRank) {
+                        const diff = currentRank - previousRank;
+                        rankChangeHtml = `<span class="rank-change rank-down">↘️ -${diff}</span>`;
+                    } else {
+                        rankChangeHtml = `<span class="rank-change rank-same">➡️ ±0</span>`;
+                    }
+                } else if (season.weeklyResults.length > 0) { // Nur 'NEU' anzeigen, wenn schon Wochen gespielt wurden
+                    rankChangeHtml = `<span class="rank-change rank-new">🆕 NEU</span>`;
+                }
+
+                const row = tableBody.insertRow();
+                row.innerHTML = `
+                    <td>${currentRank}</td>
+                    <td>${student.name}</td>
+                    <td>${student.seasonPoints}</td>
+                    <td>${rankChangeHtml}</td>
+                `;
+            });
+        }
+
+        // Initialisiert die App beim Laden des Fensters
+        window.onload = function() {
+            // Die Season-Inhalte müssen jedoch für jede Season initial gerendert werden, damit
+            // die Wochen-Buttons und Ranglisten korrekt angezeigt werden können.
+            appData.seasons.forEach(season => {
+                renderSeasonDetails(season); // Rendert die Struktur und initialen Zustand für jede Season
+            });
+
+            // Firebase initialisieren und Daten laden/verknüpfen
+            initFirebase();
+
+            // initializeUI() wird innerhalb von initFirebase() nach dem Laden der Daten aufgerufen
+        };
+
+    </script>
+</body>
+</html>
