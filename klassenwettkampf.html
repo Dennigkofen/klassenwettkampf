@@ -1906,7 +1906,7 @@
             let html = '';
             dashboardData.seasons.forEach(season => {
                 const activeClass = season.id === currentActiveSeason ? 'active' : '';
-                html += `<div class="season-tab ${activeClass}" onclick="showSeason(${season.id})">${season.name}</div>`;
+                html += `<div class="season-tab ${activeClass}" onclick="showSeason(${season.id})">S${season.id}</div>`;
             });
             document.getElementById('seasonTabs').innerHTML = html;
         }
