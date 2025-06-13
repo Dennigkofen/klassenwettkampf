@@ -1373,17 +1373,6 @@
     </div>
 
     <div class="container">
-        <!-- Champions Podium -->
-        <div class="winners-podium fade-in">
-            <h2 class="winners-title">🏆 Top 3 Champions</h2>
-            <div class="podium-container" id="topWinners">
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p>Lade Champions...</p>
-                </div>
-            </div>
-        </div>
-
         <!-- Statistiken Overview -->
         <div class="stats-overview fade-in">
             <div class="stat-card">
@@ -1576,89 +1565,11 @@
 
         // Haupt-Dashboard rendern
         function renderDashboard() {
-            renderTopWinners();
             renderStats();
             renderOverallRanking();
             renderSeasonTabs();
             renderSeasonRanking(currentActiveSeason);
             renderChampions();
-        }
-
-        // Top 3 Winners rendern - komplett neuer Code
-        function renderTopWinners() {
-            const sortedStudents = [...dashboardData.students].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
-            const top3 = sortedStudents.slice(0, 3);
-            
-            if (top3.length === 0) {
-                document.getElementById('topWinners').innerHTML = '<p style="text-align: center; color: rgba(255,255,255,0.7);">Noch keine Daten verfügbar</p>';
-                return;
-            }
-
-            let html = '';
-            
-            for (let i = 0; i < 3; i++) {
-                const student = top3[i];
-                const place = i + 1;
-                const colors = ['gold', 'silver', 'bronze'];
-                const trophyColors = ['trophy-gold', 'trophy-silver', 'trophy-bronze'];
-                const pointColors = ['gold', 'silver', 'bronze'];
-                
-                if (student) {
-                    const emoji = generateStudentEmoji(student.name);
-                    
-                    html += `
-                        <div class="winner-spot place-${place}">
-                            <span class="trophy-icon ${trophyColors[i]}">🏆</span>
-                            <div class="winner-card ${colors[i]}">
-                                <div class="place-number ${colors[i]}">${place}</div>
-                                <div class="winner-emoji">${emoji}</div>
-                                <div class="winner-name">${student.name}</div>
-                                <div class="winner-points ${pointColors[i]}">${student.totalPoints || 0} Pkt</div>
-                                <div class="winner-details">
-                                    <div class="detail-item">
-                                        <i class="fas fa-trophy"></i>
-                                        <span>${student.weeklyWins || 0}</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-crown"></i>
-                                        <span>${student.seasonWins || 0}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    html += `
-                        <div class="winner-spot place-${place}">
-                            <span class="trophy-icon ${trophyColors[i]}">🏆</span>
-                            <div class="winner-card ${colors[i]}">
-                                <div class="place-number ${colors[i]}">${place}</div>
-                                <div class="winner-emoji">❓</div>
-                                <div class="winner-name">Noch frei</div>
-                                <div class="winner-points ${pointColors[i]}">0 Pkt</div>
-                                <div class="winner-details">
-                                    <div class="detail-item">
-                                        <i class="fas fa-trophy"></i>
-                                        <span>0</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-crown"></i>
-                                        <span>0</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-
-            document.getElementById('topWinners').innerHTML = html;
-        }
-
-        // Einfache Emoji-Generation
-        function generateStudentEmoji(name) {
-            const emojis = ['🎯', '🚀', '⭐', '💎', '🔥', '🌟', '⚡', '🎨', '🎪', '🎭'];
-            return emojis[name.length % emojis.length];
         }
 
         // Champions Podium rendern
