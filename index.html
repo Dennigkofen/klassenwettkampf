@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Klassenwettkampf Rangliste</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <!-- Firebase SDKs - 'defer' hinzugefügt, um sicherzustellen, dass die Firebase-Objekte vor dem eigenen Skript geladen sind -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
 
@@ -735,13 +735,12 @@
             }
 
             try {
+                // `firebase` ist jetzt global verfügbar, da die Skripte mit `defer` geladen werden
                 app = firebase.initializeApp(__firebase_config);
                 db = firebase.firestore.getFirestore(app);
                 auth = firebase.auth.getAuth(app);
 
                 // Authenticate
-                // __initial_auth_token is provided by the Canvas environment for authenticated sessions.
-                // If deploying to GitHub, you'd handle auth differently (e.g., email/password, Google sign-in).
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
                 if (initialAuthToken) {
@@ -1469,7 +1468,7 @@
                             student.totalPoints += entry.pointsAwarded; // Addiere Punkte zur Gesamtsumme
 
                             // Season-Punkte akkumulieren
-                            seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.studentId) || 0) + entry.pointsAwarded);
+                            seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.id) || 0) + entry.pointsAwarded); // FIX: sollte entry.studentId verwenden
 
                             if (entry.place === 1) { 
                                 student.weeklyWins++;
