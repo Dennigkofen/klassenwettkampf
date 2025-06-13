@@ -1524,7 +1524,8 @@
                 html += `
                     <div class="podium-place ${position}">
                         <div class="podium-step ${position}">
-                            <div class="podium-header">
+                            ${place === 1 ? '<div class="crown">👑</div>' : ''}
+                            <div class="podium-medal-container">
                                 <div class="podium-medal ${position}">${medals[place]}</div>
                                 <div class="podium-rank-badge ${position}">${place}</div>
                             </div>
@@ -1556,7 +1557,8 @@
                 html += `
                     <div class="podium-place ${position}">
                         <div class="podium-step ${position}">
-                            <div class="podium-header">
+                            ${missingPlace === 1 ? '<div class="crown">👑</div>' : ''}
+                            <div class="podium-medal-container">
                                 <div class="podium-medal ${position}">${medals[missingPlace]}</div>
                                 <div class="podium-rank-badge ${position}">${missingPlace}</div>
                             </div>
@@ -1589,7 +1591,7 @@
 
         // Emoji für Schüler generieren
         function getStudentEmoji(name) {
-            const emojis = ['👑', '🌟', '⭐', '🎯', '🚀', '💎', '🔥', '⚡', '🎪', '🎨', '🎭', '🎪', '🎯', '🏅', '🎖️'];
+            const emojis = ['🦸', '🌟', '⭐', '🎯', '🚀', '💎', '🔥', '⚡', '🎪', '🎨', '🎭', '🎬', '🎵', '🏅', '🎖️', '🦄', '🌈', '🎁', '🎊', '🎉'];
             const index = name.length % emojis.length;
             return emojis[index];
         }
@@ -1602,13 +1604,13 @@
             document.querySelectorAll('.confetti').forEach(el => el.remove());
             
             // Erstelle neues Konfetti
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 30; i++) {
                 setTimeout(() => {
                     const confetti = document.createElement('div');
                     confetti.className = 'confetti';
                     confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 2 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                    confetti.style.animationDelay = Math.random() * 3 + 's';
+                    confetti.style.animationDuration = (Math.random() * 3 + 3) + 's';
                     podiumSection.appendChild(confetti);
                     
                     // Entferne Konfetti nach Animation
@@ -1616,8 +1618,8 @@
                         if (confetti.parentNode) {
                             confetti.parentNode.removeChild(confetti);
                         }
-                    }, 5000);
-                }, i * 100);
+                    }, 8000);
+                }, i * 150);
             }
         }
 
