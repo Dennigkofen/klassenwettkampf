@@ -5,10 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Klassenwettkampf Rangliste</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase SDKs - Angepasst für Realtime Database -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js" defer></script> <!-- Realtime Database SDK -->
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, set, get, child, onValue, push, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        
+        // Firebase-Konfiguration
+        const firebaseConfig = {
+            databaseURL: "https://wortartenspiele-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+
+        // Firebase initialisieren
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        
+        // Firebase-Funktionen global verfügbar machen
+        window.firebase = {
+            database,
+            ref,
+            set,
+            get,
+            child,
+            onValue,
+            push,
+            remove
+        };
+
+        // App initialisieren, nachdem Firebase geladen ist
+        window.initApp();
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
 
@@ -89,6 +114,30 @@
         @keyframes float {
             0% { transform: translateY(-50%) rotate(0deg); }
             100% { transform: translateY(-60%) rotate(5deg); }
+        }
+
+        .loading-indicator {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #FFD700;
+        }
+
+        .loading-indicator .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid #FFD700;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .tabs {
@@ -508,37 +557,9 @@
     </header>
 
     <!-- Loading Indicator -->
-    <div id="loadingIndicator" style="
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 1.5em;
-        z-index: 1001;
-    ">
-        Lade Daten...
-    </div>
-
-    <!-- User ID Display -->
-    <div id="userIdDisplay" style="
-        background-color: rgba(0, 0, 0, 0.3);
-        padding: 10px 15px;
-        border-radius: 8px;
-        margin: 10px auto; /* Center it */
-        width: fit-content;
-        max-width: 90%;
-        word-wrap: break-word; /* Ensure long IDs wrap */
-        text-align: center;
-        font-size: 0.9em;
-        color: rgba(255,255,255,0.7);
-    ">
-        Lade Benutzer-ID...
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Lade Daten...</span>
     </div>
 
     <!-- Confirmation Dialog -->
@@ -576,7 +597,7 @@
         z-index: 1001;
     "></div>
 
-    <div class="container">
+    <div class="container" id="mainContent" style="display: none;">
         <div class="tabs">
             <button class="tab-button active" onclick="showTab('overall')">🏆 Gesamtrangliste</button>
             <button class="tab-button" onclick="showTab('season1')">📊 Season 1</button>
@@ -659,9 +680,9 @@
     </div>
 
     <script>
-        // In-Memory Storage für alle Daten
+        // App-Daten - Firebase als Single Source of Truth
         let appData = {
-            students: [], // [{ id: 'uuid', name: 'Schüler A', totalPoints: 0, weeklyWins: 0, seasonWins: 0, overallPreviousRank: null }]
+            students: [], 
             seasons: [
                 { id: 1, name: 'Season 1', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
                 { id: 2, name: 'Season 2', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
@@ -671,33 +692,186 @@
             ],
             currentSeasonId: 1,
             activeTab: 'overall',
-            // Punktevergabe nach Platzierung
             POINTS_SYSTEM: { 1: 15, 2: 10, 3: 6, 4: 3, 5: 1 }
         };
 
-        // Globale Firebase-Variablen (werden später initialisiert)
-        let app;
-        let db; // Realtime Database-Instanz
-        let auth;
-        let userId = 'loading...'; // Platzhalter, bis authentifiziert
+        let isDataLoaded = false;
 
-        // Firebase Konfiguration - HIER WURDE IHRE KONFIGURATION EINGEFÜGT
-        const firebaseConfig = {
-            apiKey: "AIzaSyAvwY8kQ3dAQmusJk3tyL933OdCNfwQftA",
-            authDomain: "klassenwettkampf.firebaseapp.com",
-            databaseURL: "https://wortartenspiele-default-rtdb.europe-west1.firebasedatabase.app", // ANPASSUNG: Neue Datenbank-URL
-            projectId: "klassenwettkampf",
-            storageBucket: "klassenwettkampf.firebasestorage.app",
-            messagingSenderId: "443034704823",
-            appId: "1:443034704823:web:d6ac43758c7567a1fda632",
-            measurementId: "G-K3SN76DC0L"
+        // App-Initialisierung
+        window.initApp = async function() {
+            try {
+                await loadDataFromFirebase();
+                hideLoadingIndicator();
+                initializeUI();
+                setupRealtimeListeners();
+            } catch (error) {
+                console.error('Fehler beim Initialisieren der App:', error);
+                showMessage('Fehler beim Laden der Daten. Bitte laden Sie die Seite neu.');
+                hideLoadingIndicator();
+            }
         };
 
-        // Diese Variablen sind für die Canvas-Umgebung erforderlich und werden hier neu definiert.
-        // Sie simulieren das Verhalten der bereitgestellten globalen Variablen.
-        // In einer Live-Umgebung würden diese vom Canvas-Host injiziert.
-        const __app_id = firebaseConfig.projectId; // Verwende projectId als eindeutige App-ID für Realtime Database-Pfad
-        const __firebase_config = firebaseConfig; // Verwende die direkte Konfiguration
+        // Firebase-Funktionen
+        async function loadDataFromFirebase() {
+            try {
+                const snapshot = await window.firebase.get(window.firebase.child(window.firebase.ref(window.firebase.database), 'klassenwettkampf'));
+                
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    
+                    // Lade Schüler
+                    if (data.students) {
+                        appData.students = Object.keys(data.students).map(key => ({
+                            id: key,
+                            ...data.students[key]
+                        }));
+                    }
+
+                    // Lade Seasons
+                    if (data.seasons) {
+                        appData.seasons.forEach((season, index) => {
+                            const seasonData = data.seasons[`season${season.id}`];
+                            if (seasonData) {
+                                Object.assign(season, seasonData);
+                            }
+                        });
+                    }
+
+                    // Lade App-Einstellungen
+                    if (data.settings) {
+                        if (data.settings.currentSeasonId) {
+                            appData.currentSeasonId = data.settings.currentSeasonId;
+                        }
+                        if (data.settings.activeTab) {
+                            appData.activeTab = data.settings.activeTab;
+                        }
+                    }
+
+                    console.log('Daten erfolgreich von Firebase geladen');
+                } else {
+                    console.log('Keine Daten in Firebase gefunden - starte mit leeren Daten');
+                }
+                
+                isDataLoaded = true;
+            } catch (error) {
+                console.error('Fehler beim Laden der Daten:', error);
+                throw error;
+            }
+        }
+
+        async function saveDataToFirebase() {
+            if (!isDataLoaded) return; // Verhindere Speichern vor dem ersten Laden
+
+            try {
+                const dataToSave = {
+                    students: {},
+                    seasons: {},
+                    settings: {
+                        currentSeasonId: appData.currentSeasonId,
+                        activeTab: appData.activeTab,
+                        lastUpdated: Date.now()
+                    }
+                };
+
+                // Schüler speichern
+                appData.students.forEach(student => {
+                    dataToSave.students[student.id] = {
+                        name: student.name,
+                        totalPoints: student.totalPoints,
+                        weeklyWins: student.weeklyWins,
+                        seasonWins: student.seasonWins,
+                        overallPreviousRank: student.overallPreviousRank
+                    };
+                });
+
+                // Seasons speichern
+                appData.seasons.forEach(season => {
+                    dataToSave.seasons[`season${season.id}`] = {
+                        weeksCompleted: season.weeksCompleted,
+                        currentWeek: season.currentWeek,
+                        winnerId: season.winnerId,
+                        weeklyResults: season.weeklyResults,
+                        seasonRankings: season.seasonRankings
+                    };
+                });
+
+                await window.firebase.set(window.firebase.ref(window.firebase.database, 'klassenwettkampf'), dataToSave);
+                console.log('Daten erfolgreich in Firebase gespeichert');
+            } catch (error) {
+                console.error('Fehler beim Speichern der Daten:', error);
+                showMessage('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+            }
+        }
+
+        function setupRealtimeListeners() {
+            // Listener für Änderungen an Schülerdaten
+            window.firebase.onValue(window.firebase.ref(window.firebase.database, 'klassenwettkampf/students'), (snapshot) => {
+                if (snapshot.exists() && isDataLoaded) {
+                    const students = snapshot.val();
+                    const newStudentsList = Object.keys(students).map(key => ({
+                        id: key,
+                        ...students[key]
+                    }));
+                    
+                    // Nur updaten wenn sich etwas geändert hat
+                    if (JSON.stringify(newStudentsList) !== JSON.stringify(appData.students)) {
+                        appData.students = newStudentsList;
+                        renderOverallRanking();
+                        updateStatistics();
+                        
+                        // Season-Tabellen aktualisieren, wenn sie sichtbar sind
+                        appData.seasons.forEach(season => {
+                            if (document.getElementById(`season${season.id}`).classList.contains('active')) {
+                                renderSeasonRankingTable(season);
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Listener für Änderungen an Season-Daten
+            window.firebase.onValue(window.firebase.ref(window.firebase.database, 'klassenwettkampf/seasons'), (snapshot) => {
+                if (snapshot.exists() && isDataLoaded) {
+                    const seasons = snapshot.val();
+                    
+                    appData.seasons.forEach((season, index) => {
+                        const seasonData = seasons[`season${season.id}`];
+                        if (seasonData) {
+                            const hasChanged = JSON.stringify(seasonData) !== JSON.stringify({
+                                weeksCompleted: season.weeksCompleted,
+                                currentWeek: season.currentWeek,
+                                winnerId: season.winnerId,
+                                weeklyResults: season.weeklyResults,
+                                seasonRankings: season.seasonRankings
+                            });
+                            
+                            if (hasChanged) {
+                                Object.assign(season, seasonData);
+                                
+                                // Season-UI aktualisieren, wenn sie sichtbar ist
+                                if (document.getElementById(`season${season.id}`).classList.contains('active')) {
+                                    renderWeekButtons(season);
+                                    updateProgressBar(season);
+                                    renderSeasonRankingTable(season);
+                                }
+                            }
+                        }
+                    });
+                    
+                    updateStatistics();
+                }
+            });
+        }
+
+        function hideLoadingIndicator() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        function showLoadingIndicator() {
+            document.getElementById('loadingIndicator').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
 
         // Hilfsfunktion zum Anzeigen von Nachrichten
         function showMessage(text, duration = 3000) {
@@ -718,197 +892,6 @@
             });
         }
 
-        // Firebase Initialisierung und Authentifizierung
-        async function initFirebase() {
-            document.getElementById('loadingIndicator').style.display = 'flex'; // Ladeindikator anzeigen
-            console.log('Initialisiere Firebase...');
-            
-            // Verbesserte Prüfung der Firebase-Konfiguration
-            if (!__firebase_config || !__firebase_config.apiKey || !__firebase_config.databaseURL) {
-                console.error('Firebase-Konfiguration ist unvollständig oder fehlt. Überprüfen Sie Ihre firebaseConfig.');
-                showMessage('Firebase ist nicht korrekt konfiguriert. Daten werden nicht gespeichert.', 8000);
-                document.getElementById('loadingIndicator').style.display = 'none';
-                document.getElementById('userIdDisplay').textContent = 'Firebase nicht konfiguriert';
-                // UI mit Standard-In-Memory-Daten rendern
-                appData.seasons.forEach(season => {
-                    renderSeasonDetails(season);
-                });
-                initializeUI();
-                return;
-            }
-
-            try {
-                // `firebase` ist jetzt global verfügbar, da die Skripte mit `defer` geladen werden
-                app = firebase.initializeApp(__firebase_config);
-                db = firebase.database.getDatabase(app); // Realtime Database-Instanz holen
-                auth = firebase.auth.getAuth(app);
-
-                // Authentifizierung
-                // __initial_auth_token wird von der Canvas-Umgebung für authentifizierte Sitzungen bereitgestellt.
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                
-                if (initialAuthToken) {
-                    await firebase.auth.signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await firebase.auth.signInAnonymously(auth);
-                }
-
-                // Auf Authentifizierungsstatusänderungen hören und dann Daten laden
-                firebase.auth.onAuthStateChanged(async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('userIdDisplay').textContent = `Benutzer-ID: ${userId}`;
-                        console.log('Firebase initialisiert und Benutzer authentifiziert:', userId);
-                        await loadDataFromRealtimeDatabase(); // Daten aus RTDB laden
-                        startRealtimeListener(); // Auf Änderungen hören
-                        document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator ausblenden
-                    } else {
-                        console.log('Benutzer ist abgemeldet oder Authentifizierung fehlgeschlagen.');
-                        document.getElementById('userIdDisplay').textContent = 'Benutzer nicht authentifiziert.';
-                        document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator ausblenden
-                        // UI mit Standard-In-Memory-Daten rendern, falls kein Benutzer
-                        appData.seasons.forEach(season => {
-                            renderSeasonDetails(season);
-                        });
-                        initializeUI();
-                    }
-                });
-
-            } catch (error) {
-                console.error("Fehler bei der Firebase-Initialisierung oder Authentifizierung:", error);
-                showMessage(`Fehler bei Firebase-Verbindung: ${error.message}. Überprüfen Sie Ihre Realtime Database-Sicherheitsregeln!`, 10000); // Angepasste Fehlermeldung
-                document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator bei Fehler ausblenden
-                document.getElementById('userIdDisplay').textContent = 'Fehler bei Firebase-Init';
-                // UI mit Standard-In-Memory-Daten bei Fehler rendern
-                appData.seasons.forEach(season => {
-                    renderSeasonDetails(season);
-                });
-                initializeUI();
-            }
-        }
-
-        // Daten in Realtime Database speichern
-        async function saveDataToRealtimeDatabase() {
-            if (!db || !userId || userId === 'loading...') { // Prüfen, ob DB und User ID bereit sind
-                console.warn("Realtime Database oder User ID nicht verfügbar. Speichern nicht möglich.");
-                return;
-            }
-            try {
-                // Pfad für Realtime Database: /artifacts/{appId}/users/{userId}/rankings/data
-                const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-                // appData in JSON umwandeln, um Zirkelbezüge oder nicht-serialisierbare Objekte zu vermeiden
-                const dataToSave = JSON.parse(JSON.stringify(appData));
-                await firebase.database.set(dataRef, dataToSave);
-                console.log("Daten erfolgreich in Realtime Database gespeichert.");
-            } catch (error) {
-                console.error("Fehler beim Speichern der Daten in Realtime Database:", error);
-                showMessage(`Fehler beim Speichern: ${error.message}`, 5000);
-            }
-        }
-
-        // Daten aus Realtime Database laden
-        async function loadDataFromRealtimeDatabase() {
-            if (!db || !userId || userId === 'loading...') { // Prüfen, ob DB und User ID bereit sind
-                console.warn("Realtime Database oder User ID nicht verfügbar. Laden nicht möglich.");
-                return;
-            }
-            try {
-                const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-                const snapshot = await firebase.database.get(dataRef); // Daten einmalig abrufen
-
-                if (snapshot.exists()) {
-                    const loadedData = snapshot.val(); // .val() für Realtime Database Snapshot verwenden
-                    
-                    // Sicherstellen, dass previousRank immer vorhanden ist (auch wenn null)
-                    if (loadedData.seasons) {
-                        loadedData.seasons.forEach(season => {
-                            if (season.seasonRankings) {
-                                for (const studentId in season.seasonRankings) {
-                                    if (season.seasonRankings[studentId].previousRank === undefined) {
-                                        season.seasonRankings[studentId].previousRank = null;
-                                    }
-                                }
-                            }
-                        });
-                    }
-
-                    // Tiefenvergleich, um unnötige UI-Updates beim initialen Laden zu vermeiden
-                    if (JSON.stringify(appData) !== JSON.stringify(loadedData)) {
-                        appData = loadedData;
-                        console.log("Daten erfolgreich aus Realtime Database geladen.");
-                        appData.seasons.forEach(season => {
-                            renderSeasonDetails(season);
-                        });
-                        initializeUI();
-                        showMessage("Daten aus Cloud geladen.", 3000);
-                    } else {
-                        console.log("Geladene Daten sind identisch mit lokalen Daten.");
-                        appData.seasons.forEach(season => {
-                            renderSeasonDetails(season);
-                        });
-                        initializeUI();
-                    }
-                } else {
-                    console.log("Keine Daten in Realtime Database gefunden. Initialisiere mit Standarddaten.");
-                    saveDataToRealtimeDatabase(); // Initialdaten speichern
-                    appData.seasons.forEach(season => {
-                        renderSeasonDetails(season);
-                    });
-                    initializeUI();
-                }
-            } catch (error) {
-                console.error("Fehler beim Laden der Daten aus Realtime Database:", error);
-                showMessage(`Fehler beim Laden: ${error.message}`, 5000);
-            }
-        }
-
-        // Startet den Echtzeit-Listener für Realtime Database
-        function startRealtimeListener() {
-            if (!db || !userId || userId === 'loading...') return;
-
-            const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-
-            firebase.database.onValue(dataRef, (snapshot) => {
-                const newData = snapshot.val(); // .val() für Realtime Database Snapshot verwenden
-                if (newData) {
-                    // Verhindern von Endlosschleifen, wenn dieses Update selbst ein weiteres Speichern auslöst
-                    if (JSON.stringify(appData) !== JSON.stringify(newData)) {
-                        appData = newData;
-                        console.log("Echtzeit-Update von Realtime Database erhalten.");
-                        // UI bei Änderungen neu rendern
-                        appData.seasons.forEach(season => {
-                            renderSeasonDetails(season);
-                        });
-                        initializeUI();
-                    }
-                } else {
-                    console.log("Daten existieren nicht in Realtime Database, eventuell gelöscht oder noch nicht initialisiert.");
-                    // Falls Daten extern gelöscht wurden, lokale Daten zurücksetzen
-                    appData = {
-                        students: [],
-                        seasons: [
-                            { id: 1, name: 'Season 1', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
-                            { id: 2, name: 'Season 2', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
-                            { id: 3, name: 'Season 3', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
-                            { id: 4, name: 'Season 4', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} },
-                            { id: 5, name: 'Season 5', weeksCompleted: 0, currentWeek: 1, winnerId: null, weeklyResults: [], seasonRankings: {} }
-                        ],
-                        currentSeasonId: 1,
-                        activeTab: 'overall',
-                        POINTS_SYSTEM: { 1: 15, 2: 10, 3: 6, 4: 3, 5: 1 }
-                    };
-                    appData.seasons.forEach(season => {
-                        renderSeasonDetails(season);
-                    });
-                    initializeUI();
-                    showMessage("Daten in Realtime Database zurückgesetzt oder gelöscht.", 3000);
-                }
-            }, (error) => {
-                console.error("Fehler beim Abonnieren von Echtzeit-Updates:", error);
-                showMessage(`Echtzeit-Update Fehler: ${error.message}`, 5000);
-            });
-        }
-
         // Allgemeine Funktion zum Anzeigen eines Bestätigungsdialogs
         let currentConfirmCallback = null;
 
@@ -922,9 +905,8 @@
             msgText.textContent = message;
             dialog.style.display = 'block';
             overlay.style.display = 'block';
-            currentConfirmCallback = onConfirmCallback; // Speichert den Callback
+            currentConfirmCallback = onConfirmCallback;
 
-            // Entfernt vorherige Listener, um Mehrfachaufrufe zu verhindern
             okBtn.onclick = null;
             cancelBtn.onclick = null;
 
@@ -950,25 +932,20 @@
         // Initialisiert die UI basierend auf den Daten
         function initializeUI() {
             renderOverallRanking();
-            // Stellt sicher, dass der aktive Tab beim Laden angezeigt wird
             showTab(appData.activeTab, false);
         }
 
         // Wechselt zwischen den Tabs
         function showTab(tabId, updateActive = true) {
-            // Versteckt alle Tab-Inhalte
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
-            // Entfernt den aktiven Zustand von allen Tab-Buttons
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.classList.remove('active');
             });
 
-            // Zeigt den ausgewählten Tab-Inhalt an
             document.getElementById(tabId).classList.add('active');
 
-            // Setzt den ausgewählten Tab-Button als aktiv
             const tabButton = document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`);
             if (tabButton) {
                 tabButton.classList.add('active');
@@ -976,9 +953,9 @@
 
             if (updateActive) {
                 appData.activeTab = tabId;
+                saveDataToFirebase(); // Speichere Tab-Zustand
             }
 
-            // Wenn es ein Season-Tab ist, die Season-Details rendern
             if (tabId.startsWith('season')) {
                 const seasonIndex = parseInt(tabId.replace('season', '')) - 1;
                 if (appData.seasons[seasonIndex]) {
@@ -988,7 +965,7 @@
         }
 
         // Fügt einen neuen Schüler hinzu
-        function addStudent() {
+        async function addStudent() {
             const inputElement = document.getElementById('newStudentName');
             const studentName = inputElement.value.trim();
 
@@ -1008,22 +985,29 @@
                 totalPoints: 0,
                 weeklyWins: 0,
                 seasonWins: 0,
-                overallPreviousRank: null // Für Rangänderungen
+                overallPreviousRank: null
             };
+            
             appData.students.push(newStudent);
-            inputElement.value = ''; // Eingabefeld leeren
-            renderOverallRanking();
-            updateStatistics();
-            saveDataToRealtimeDatabase(); // Daten in RTDB speichern
-            showMessage(`Schüler "${studentName}" hinzugefügt.`);
+            inputElement.value = '';
+            
+            try {
+                await saveDataToFirebase();
+                renderOverallRanking();
+                updateStatistics();
+                showMessage(`Schüler "${studentName}" hinzugefügt.`);
+            } catch (error) {
+                // Rollback bei Fehler
+                appData.students = appData.students.filter(s => s.id !== newStudent.id);
+                showMessage('Fehler beim Hinzufügen des Schülers. Bitte versuchen Sie es erneut.');
+            }
         }
 
         // Rendert die Gesamtrangliste
         function renderOverallRanking() {
             const tableBody = document.getElementById('overallRankingTable').querySelector('tbody');
-            tableBody.innerHTML = ''; // Vorherige Einträge löschen
+            tableBody.innerHTML = '';
 
-            // Speichern der alten Ränge für die Berechnung der Rangänderung
             const previousRanks = {};
             appData.students.forEach(s => {
                 if (s.overallPreviousRank !== null) {
@@ -1031,7 +1015,6 @@
                 }
             });
 
-            // Sortiert Schüler nach Gesamtpunkten absteigend
             const sortedStudents = [...appData.students].sort((a, b) => b.totalPoints - a.totalPoints);
 
             sortedStudents.forEach((student, index) => {
@@ -1050,11 +1033,9 @@
                         rankChangeHtml = `<span class="rank-change rank-same">➡️ ±0</span>`;
                     }
                 } else if (student.overallPreviousRank === null && appData.seasons[0].weeklyResults.length > 0) {
-                    // Wenn der Schüler neu in der Rangliste erscheint (nicht neu in der App)
                     rankChangeHtml = `<span class="rank-change rank-new">🆕 NEU</span>`;
                 }
 
-                // Aktualisiere den PreviousRank für die nächste Woche
                 student.overallPreviousRank = currentRank;
 
                 const row = tableBody.insertRow();
@@ -1087,38 +1068,50 @@
         }
 
         // Funktion zum tatsächlichen Löschen des Schülers und aller zugehörigen Daten
-        function deleteStudent(studentId) {
+        async function deleteStudent(studentId) {
             const studentToDelete = appData.students.find(s => s.id === studentId);
             if (!studentToDelete) {
                 console.warn(`Student with ID ${studentId} not found for deletion.`);
                 return;
             }
 
-            // 1. Entferne den Schüler aus dem students-Array
-            appData.students = appData.students.filter(s => s.id !== studentId);
+            // Backup für Rollback
+            const studentsBackup = [...appData.students];
+            const seasonsBackup = appData.seasons.map(s => ({ ...s, weeklyResults: [...s.weeklyResults], seasonRankings: { ...s.seasonRankings } }));
 
-            // 2. Entferne die Daten des Schülers aus allen Season-Ranglisten und Wochenergebnissen
-            appData.seasons.forEach(season => {
-                // Entferne aus der seasonRankings-Map
-                if (season.seasonRankings[studentId]) {
-                    delete season.seasonRankings[studentId];
-                }
+            try {
+                // 1. Entferne den Schüler aus dem students-Array
+                appData.students = appData.students.filter(s => s.id !== studentId);
 
-                // Filtere Einträge des gelöschten Schülers aus den weeklyResults-Arrays
-                season.weeklyResults = season.weeklyResults.map(weekData => {
-                    return weekData.filter(entry => entry.studentId !== studentId);
+                // 2. Entferne die Daten des Schülers aus allen Season-Ranglisten und Wochenergebnissen
+                appData.seasons.forEach(season => {
+                    if (season.seasonRankings[studentId]) {
+                        delete season.seasonRankings[studentId];
+                    }
+
+                    season.weeklyResults = season.weeklyResults.map(weekData => {
+                        return weekData.filter(entry => entry.studentId !== studentId);
+                    });
+
+                    if (season.winnerId === studentId) {
+                        season.winnerId = null;
+                    }
                 });
 
-                // Setze winnerId zurück, falls der gelöschte Schüler der Season-Gewinner war
-                if (season.winnerId === studentId) {
-                    season.winnerId = null; // Oder 'tied', wenn es ein Gleichstand war und alle verbleibenden Spieler auch einen Gleichstand bilden
-                }
-            });
+                // 3. Berechne alle Punkte und Statistiken neu
+                recalculateAllPointsAndStats(); 
 
-            // 3. Berechne alle Punkte und Statistiken neu und speichere sie in Realtime Database
-            recalculateAllPointsAndStats(); // Diese Funktion ruft saveDataToRealtimeDatabase() auf
+                // 4. Speichere in Firebase
+                await saveDataToFirebase();
 
-            showMessage(`Schüler "${studentToDelete.name}" wurde gelöscht.`);
+                showMessage(`Schüler "${studentToDelete.name}" wurde gelöscht.`);
+            } catch (error) {
+                // Rollback bei Fehler
+                appData.students = studentsBackup;
+                appData.seasons = seasonsBackup;
+                showMessage('Fehler beim Löschen des Schülers. Bitte versuchen Sie es erneut.');
+                console.error('Fehler beim Löschen:', error);
+            }
         }
 
         // Aktualisiert die Statistik-Karten
@@ -1127,16 +1120,15 @@
 
             let totalWeeksPlayed = 0;
             let totalSeasonsCompleted = 0;
-            let totalWeeklyWinners = 0; // Wird aus student.weeklyWins summiert
+            let totalWeeklyWinners = 0;
 
             appData.seasons.forEach(season => {
                 totalWeeksPlayed += season.weeksCompleted;
-                if (season.winnerId && season.winnerId !== 'tied') { // Zählt nur Seasons mit einem eindeutigen Gewinner
+                if (season.winnerId && season.winnerId !== 'tied') {
                     totalSeasonsCompleted++;
                 }
             });
             
-            // Summiert die weeklyWins aller Schüler für "Wochensieger total"
             totalWeeklyWinners = appData.students.reduce((sum, student) => sum + student.weeklyWins, 0);
 
             document.getElementById('statWeeksPlayed').textContent = totalWeeksPlayed;
@@ -1147,7 +1139,6 @@
         // Rendert den Inhalt eines Season-Tabs
         function renderSeasonDetails(season) {
             const seasonContentDiv = document.getElementById(`season${season.id}`);
-            // Sicherstellen, dass der Div existiert, bevor er manipuliert wird
             if (!seasonContentDiv) {
                 console.error(`Season content div for season${season.id} not found.`);
                 return;
@@ -1158,7 +1149,7 @@
                     <h2>${season.name}</h2>
                 </div>
                 <div class="week-buttons" id="weekButtonsSeason${season.id}">
-                    <!-- Wochen-Buttons werden hier generiert -->
+                    <!-- Week buttons will be generated here -->
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" id="progressBarSeason${season.id}"></div>
@@ -1176,7 +1167,7 @@
                             </tr>
                         </thead>
                         <tbody id="pointsInputTableBodySeason${season.id}">
-                            <!-- Eingabezeilen für Schüler werden hier generiert -->
+                            <!-- Input rows for students will be generated here -->
                         </tbody>
                     </table>
                     <div class="points-input-actions">
@@ -1196,7 +1187,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Season-Ranglistenzeilen werden hier eingefügt -->
+                        <!-- Season Ranking rows will be injected here -->
                     </tbody>
                 </table>
             `;
@@ -1205,7 +1196,6 @@
             updateProgressBar(season);
             renderSeasonRankingTable(season);
 
-            // Eingabesektion standardmässig ausblenden
             document.getElementById(`pointsInputSectionSeason${season.id}`).style.display = 'none';
         }
 
@@ -1227,7 +1217,7 @@
                 if (i < season.currentWeek) {
                     statusClass = 'status-completed';
                     buttonIcon = '✅';
-                    onClickAction = `editWeeklyResults(${season.id}, ${i})`; // Erlaubt Bearbeitung abgeschlossener Wochen
+                    onClickAction = `editWeeklyResults(${season.id}, ${i})`;
                 } else if (i === season.currentWeek) {
                     statusClass = 'status-next';
                     buttonIcon = '▶️';
@@ -1253,14 +1243,14 @@
         function updateProgressBar(season) {
             const progressBar = document.getElementById(`progressBarSeason${season.id}`);
             const progressText = document.getElementById(`progressTextSeason${season.id}`);
-            if (!progressBar || !progressText) return; // Null-Check hinzufügen
+            if (!progressBar || !progressText) return;
 
             const percentage = (season.weeksCompleted / 6) * 100;
             progressBar.style.width = `${percentage}%`;
             progressText.textContent = `${season.weeksCompleted}/6 Wochen`;
-            // CSS-Variablen müssen direkt als String gesetzt werden
+            
             if (percentage === 100) {
-                progressBar.style.background = 'linear-gradient(135deg, #FFD700 0%, #FFA000 100%)'; /* Gold, wenn abgeschlossen */
+                progressBar.style.background = 'linear-gradient(135deg, #FFD700 0%, #FFA000 100%)';
             } else {
                 progressBar.style.background = 'linear-gradient(135deg, #6A11CB 0%, #2575FC 100%)';
             }
@@ -1282,7 +1272,7 @@
         // Befüllt die Punkteingabetabelle
         function populatePointsInputTable(seasonId) {
             const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
-            tableBody.innerHTML = ''; // Vorherige Einträge löschen
+            tableBody.innerHTML = '';
 
             appData.students.forEach(student => {
                 const row = tableBody.insertRow();
@@ -1293,7 +1283,7 @@
                     <td class="live-place"></td>
                 `;
             });
-            // Initiales Update für alle Zeilen, Übergabe der Zeile an die Funktion
+            
             tableBody.querySelectorAll('input[type="number"]').forEach(input => {
                 updateLivePlace(seasonId, input);
             });
@@ -1314,10 +1304,11 @@
 
         // Befüllt die Punkteingabetabelle mit vorhandenen Daten für die Bearbeitung
         function populatePointsInputTableForEdit(seasonId, weekNum) {
+            const season = appData.seasons.find(s => s.id === seasonId);
             const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
             tableBody.innerHTML = '';
 
-            const weeklyData = season.weeklyResults[weekNum - 1]; // Array von { studentId, points, place }
+            const weeklyData = season.weeklyResults[weekNum - 1];
 
             appData.students.forEach(student => {
                 const existingEntry = weeklyData.find(entry => entry.studentId === student.id);
@@ -1331,18 +1322,18 @@
                     <td class="live-place"></td>
                 `;
             });
-            // Initiales Update für alle Zeilen nach dem Befüllen für die Bearbeitung
+            
             tableBody.querySelectorAll('input[type="number"]').forEach(input => {
                 updateLivePlace(seasonId, input);
             });
         }
 
-        // Hilfsfunktion zur Ermittlung des gruppenbasierten Ranges (für Speicherung und Tabellen)
+        // Hilfsfunktion zur Ermittlung des gruppenbasierten Ranges
         function getGroupedRank(index, groupSize) {
             return Math.floor(index / groupSize) + 1;
         }
 
-        // NEUE updateLivePlace Funktion: Basierend auf den eingegebenen Punkten
+        // Aktualisiert die Live-Platzierung basierend auf eingegebenen Punkten
         function updateLivePlace(seasonId, inputElement) {
             const points = parseInt(inputElement.value) || 0;
             const livePlaceCell = inputElement.closest('tr').querySelector('.live-place');
@@ -1350,7 +1341,6 @@
             let medal = '';
             let placeText = '';
 
-            // Feste Zuordnung basierend auf eingegebenen Punkten
             if (points === 15) {
                 placeText = '1. Platz';
                 medal = '<span class="place-medal medal-gold">🥇</span>';
@@ -1365,21 +1355,20 @@
             } else if (points === 1) {
                 placeText = '5. Platz';
             } else {
-                placeText = 'Kein Platz'; // Oder "0 Punkte" je nach Wunsch
+                placeText = 'Kein Platz';
             }
 
             livePlaceCell.innerHTML = `${medal}${placeText}`;
         }
 
         // Speichert die wöchentlichen Ergebnisse
-        function saveWeeklyResults(seasonId) {
+        async function saveWeeklyResults(seasonId) {
             const season = appData.seasons.find(s => s.id === seasonId);
             if (!season) return;
 
             const tableBody = document.getElementById(`pointsInputTableBodySeason${seasonId}`);
-            const weeklyResults = []; // [{ studentId: 'uuid', points: 10, place: 1, pointsAwarded: 15 }]
+            const weeklyResults = [];
 
-            // Sammelt Punkte von allen Schülern
             const studentScores = [];
             tableBody.querySelectorAll('tr').forEach(row => {
                 const studentId = row.getAttribute('data-student-id');
@@ -1388,13 +1377,11 @@
                 studentScores.push({ studentId, points });
             });
 
-            // Sortiert nach eingegebenen Punkten (absteigend) für die tatsächliche Rangierung
             studentScores.sort((a, b) => b.points - a.points);
 
-            // Die tatsächliche Platzierung (gruppenbasiert) und Punktevergabe
             for (let i = 0; i < studentScores.length; i++) {
                 const entry = studentScores[i];
-                const currentPlace = getGroupedRank(i, 4); // Gruppenbasierter Rang für Speicherung
+                const currentPlace = getGroupedRank(i, 4);
 
                 let pointsAwarded = 0;
                 if (appData.POINTS_SYSTEM[currentPlace]) {
@@ -1403,69 +1390,64 @@
 
                 weeklyResults.push({
                     studentId: entry.studentId,
-                    points: entry.points, // die direkt eingegebenen Punkte
-                    place: currentPlace,  // der berechnete gruppenbasierte Platz
-                    pointsAwarded: pointsAwarded // die Punkte aus dem System
+                    points: entry.points,
+                    place: currentPlace,
+                    pointsAwarded: pointsAwarded
                 });
             }
 
             const currentSeason = season;
-            const weekIndex = currentSeason.currentWeek - 1; // 0-basiert
+            const weekIndex = currentSeason.currentWeek - 1;
 
-            if (currentSeason.weeklyResults[weekIndex]) {
-                // Dies ist eine Bearbeitung einer alten Woche
-                currentSeason.weeklyResults[weekIndex] = weeklyResults;
-                showMessage(`Woche ${season.currentWeek} in Season ${season.id} wurde aktualisiert.`);
-            } else {
-                // Dies ist eine neue Eingabe
-                currentSeason.weeklyResults.push(weeklyResults);
-                currentSeason.weeksCompleted++;
-                showMessage(`Woche ${season.currentWeek} in Season ${season.id} gespeichert.`);
-                currentSeason.currentWeek++; // Nächste Woche freischalten
+            try {
+                if (currentSeason.weeklyResults[weekIndex]) {
+                    currentSeason.weeklyResults[weekIndex] = weeklyResults;
+                    showMessage(`Woche ${season.currentWeek} in Season ${season.id} wurde aktualisiert.`);
+                } else {
+                    currentSeason.weeklyResults.push(weeklyResults);
+                    currentSeason.weeksCompleted++;
+                    showMessage(`Woche ${season.currentWeek} in Season ${season.id} gespeichert.`);
+                    currentSeason.currentWeek++;
+                }
+
+                recalculateAllPointsAndStats();
+                await saveDataToFirebase();
+
+                renderWeekButtons(season);
+                updateProgressBar(season);
+                renderSeasonRankingTable(season);
+                renderOverallRanking();
+                document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'none';
+            } catch (error) {
+                showMessage('Fehler beim Speichern der Ergebnisse. Bitte versuchen Sie es erneut.');
+                console.error('Fehler beim Speichern:', error);
             }
-
-            // Neu-Berechnung aller Punkte und Statistiken nach jeder Änderung
-            recalculateAllPointsAndStats();
-
-            // UI aktualisieren
-            renderWeekButtons(season);
-            updateProgressBar(season);
-            renderSeasonRankingTable(season);
-            renderOverallRanking(); // Gesamtrangliste aktualisieren
-            document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'none'; // Eingabesektion verstecken
         }
 
         // Funktion zur vollständigen Neuberechnung aller Punkte und Statistiken
         function recalculateAllPointsAndStats() {
-            // 1. Alle Schülerdaten zurücksetzen (totalPoints, weeklyWins, seasonWins)
             appData.students.forEach(student => {
                 student.totalPoints = 0;
                 student.weeklyWins = 0;
                 student.seasonWins = 0; 
             });
 
-            // 2. Durch alle Seasons iterieren und Punkte sowie Siege neu addieren
             appData.seasons.forEach(season => {
-                // Previous season ranks for *this specific season* must be captured
-                // BEFORE the season.seasonRankings for *this season* are rebuilt.
                 const previousSeasonRanksForThisSeason = {};
                 for (const studentId in season.seasonRankings) {
                     previousSeasonRanksForThisSeason[studentId] = season.seasonRankings[studentId].rank;
                 }
                 
-                // Clear season-specific rankings and winner *before* re-calculating them
                 season.seasonRankings = {};
                 season.winnerId = null;
 
-                const seasonPointsMap = new Map(); // Punkte für die aktuelle Season
+                const seasonPointsMap = new Map();
 
                 season.weeklyResults.forEach(weekData => {
                     weekData.forEach(entry => {
                         const student = appData.students.find(s => s.id === entry.studentId);
                         if (student) {
-                            student.totalPoints += entry.pointsAwarded; // Addiere Punkte zur Gesamtsumme
-
-                            // Season-Punkte akkumulieren
+                            student.totalPoints += entry.pointsAwarded;
                             seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.studentId) || 0) + entry.pointsAwarded);
 
                             if (entry.place === 1) { 
@@ -1475,17 +1457,15 @@
                     });
                 });
 
-                // Erstelle eine sortierte Liste der Schüler für diese Season basierend auf kumulierten Season-Punkten
                 const sortedSeasonStudents = appData.students.map(s => ({
                     id: s.id,
                     points: seasonPointsMap.get(s.id) || 0
                 })).sort((a, b) => b.points - a.points);
 
-                // Weisen Sie die gruppenbasierten Ränge in der Season-Rangliste zu
                 for (let i = 0; i < sortedSeasonStudents.length; i++) {
                     const studentId = sortedSeasonStudents[i].id;
                     const points = sortedSeasonStudents[i].points;
-                    const newCalculatedRank = getGroupedRank(i, 4); // Gruppenbasierter Rang
+                    const newCalculatedRank = getGroupedRank(i, 4);
 
                     season.seasonRankings[studentId] = {
                         points: points,
@@ -1494,24 +1474,15 @@
                     };
                 }
 
-                // Season-Gewinner erneut prüfen (basierend auf den neu berechneten Daten)
                 checkSeasonWinner(season);
             });
 
-            // Abschliessend die Gesamtstatistiken aktualisieren
             updateStatistics();
-            saveDataToRealtimeDatabase(); // Daten in Realtime Database speichern
         }
 
         // Überprüft und setzt den Season-Gewinner
         function checkSeasonWinner(season) {
-            // Nur prüfen, wenn alle Wochen abgeschlossen sind und noch kein Gewinner feststeht
             if (season.weeksCompleted === 6 && !season.winnerId) {
-                // Finde den Schüler mit den höchsten Punkten in dieser Season
-                let seasonWinnerId = null;
-                let maxPoints = -1;
-
-                // Finde den ersten Platz und die Punktzahl
                 let firstPlaceStudents = [];
                 let firstPlacePoints = -1;
 
@@ -1519,23 +1490,21 @@
                     const points = season.seasonRankings[studentId].points;
                     if (points > firstPlacePoints) {
                         firstPlacePoints = points;
-                        firstPlaceStudents = [studentId]; // Neue höchste Punktzahl, setze Liste zurück
+                        firstPlaceStudents = [studentId];
                     } else if (points === firstPlacePoints) {
-                        firstPlaceStudents.push(studentId); // Gleichstand
+                        firstPlaceStudents.push(studentId);
                     }
                 }
 
-                // Ein Season-Gewinner ist nur, wenn es einen *eindeutigen* 1. Platz gibt.
                 if (firstPlaceStudents.length === 1 && season.seasonRankings[firstPlaceStudents[0]] && season.seasonRankings[firstPlaceStudents[0]].rank === 1) {
                     season.winnerId = firstPlaceStudents[0];
                     const winner = appData.students.find(s => s.id === season.winnerId);
                     if (winner) {
-                        winner.seasonWins++; // Erhöhe den Season-Sieg-Zähler des Schülers
+                        winner.seasonWins++;
                         showMessage(`🎉 ${winner.name} hat Season ${season.id} gewonnen!`, 5000);
                     }
                 } else if (firstPlaceStudents.length > 1 && season.seasonRankings[firstPlaceStudents[0]] && season.seasonRankings[firstPlaceStudents[0]].rank === 1) {
-                    // Wenn es einen Gleichstand für den 1. Platz gibt (basierend auf dem Gruppensystem ist der Rang 1)
-                    season.winnerId = 'tied'; // Markiere als unentschieden
+                    season.winnerId = 'tied';
                     showMessage(`🤝 Season ${season.id} endete unentschieden!`, 5000);
                 }
             }
@@ -1549,7 +1518,6 @@
         // Rendert die Season-Rangliste
         function renderSeasonRankingTable(season) {
             const tableBody = document.getElementById(`seasonRankingTable${season.id}`).querySelector('tbody');
-            // Null-Check hinzufügen, falls tableBody nicht gefunden wird
             if (!tableBody) {
                 console.error(`Season ranking table body for Season ${season.id} not found.`);
                 return;
@@ -1561,16 +1529,15 @@
                 return {
                     ...student,
                     seasonPoints: seasonData ? seasonData.points : 0,
-                    seasonPreviousRank: seasonData ? seasonData.previousRank : null // Der vorherige Rang in dieser Season
+                    seasonPreviousRank: seasonData ? seasonData.previousRank : null
                 };
-            }).sort((a, b) => b.seasonPoints - a.seasonPoints); // Hier weiterhin nach Punkten sortieren
+            }).sort((a, b) => b.seasonPoints - a.seasonPoints);
 
             studentsWithSeasonPoints.forEach((student, index) => {
-                // Der aktuelle Rang sollte aus season.seasonRankings genommen werden, da dort die Gruppierung erfolgt ist
                 const currentRank = season.seasonRankings[student.id] ? season.seasonRankings[student.id].rank : getGroupedRank(index, 4); 
                 let rankChangeHtml = '';
 
-                const previousRank = student.seasonPreviousRank; // Dieser Wert kommt aus der Neuberechnung
+                const previousRank = student.seasonPreviousRank;
                 if (previousRank !== null && previousRank !== undefined) {
                     if (currentRank < previousRank) {
                         const diff = previousRank - currentRank;
@@ -1581,7 +1548,7 @@
                     } else {
                         rankChangeHtml = `<span class="rank-change rank-same">➡️ ±0</span>`;
                     }
-                } else if (season.weeklyResults.length > 0) { // Nur 'NEU' anzeigen, wenn schon Wochen gespielt wurden
+                } else if (season.weeklyResults.length > 0) {
                     rankChangeHtml = `<span class="rank-change rank-new">🆕 NEU</span>`;
                 }
 
@@ -1597,16 +1564,8 @@
 
         // Initialisiert die App beim Laden des Fensters
         window.onload = function() {
-            // Die Season-Inhalte müssen jedoch für jede Season initial gerendert werden, damit
-            // die Wochen-Buttons und Ranglisten korrekt angezeigt werden können.
-            appData.seasons.forEach(season => {
-                renderSeasonDetails(season); // Rendert die Struktur und initialen Zustand für jede Season
-            });
-
-            // Firebase initialisieren und Daten laden/verknüpfen
-            initFirebase();
-
-            // initializeUI() wird innerhalb von initFirebase() nach dem Laden der Daten aufgerufen
+            // Firebase wird asynchron geladen, initApp wird automatisch aufgerufen
+            // wenn Firebase bereit ist
         };
 
     </script>
