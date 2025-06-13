@@ -720,9 +720,10 @@
             document.getElementById('loadingIndicator').style.display = 'flex'; // Show loading
             console.log('Initializing Firebase...');
             
-            if (Object.keys(__firebase_config).length === 0 || !__firebase_config.apiKey) {
-                console.warn('Firebase-Konfiguration ist leer oder unvollständig. Daten werden nicht gespeichert oder geladen.');
-                showMessage('Firebase ist nicht konfiguriert. Daten werden nicht gespeichert.', 5000);
+            // Verbesserte Prüfung der Firebase-Konfiguration
+            if (!__firebase_config || !__firebase_config.apiKey || !__firebase_config.projectId) {
+                console.error('Firebase-Konfiguration ist unvollständig oder fehlt. Überprüfen Sie Ihre firebaseConfig.');
+                showMessage('Firebase ist nicht korrekt konfiguriert. Daten werden nicht gespeichert.', 8000);
                 document.getElementById('loadingIndicator').style.display = 'none';
                 document.getElementById('userIdDisplay').textContent = 'Firebase nicht konfiguriert';
                 // Render UI with default in-memory data
@@ -772,7 +773,7 @@
 
             } catch (error) {
                 console.error("Fehler bei der Firebase-Initialisierung oder Authentifizierung:", error);
-                showMessage(`Fehler: ${error.message}`, 5000);
+                showMessage(`Fehler bei Firebase-Verbindung: ${error.message}. Überprüfen Sie Ihre Firestore-Sicherheitsregeln!`, 10000); // Längere Meldung für kritischen Fehler
                 document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading on error
                 document.getElementById('userIdDisplay').textContent = 'Fehler bei Firebase-Init';
                 // Render UI with default in-memory data on error
@@ -791,7 +792,9 @@
             try {
                 // Pfad: /artifacts/{appId}/users/{userId}/rankings/data
                 const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-                await firebase.firestore.setDoc(docRef, appData);
+                // Erstelle eine Kopie von appData, um Zirkelbezüge oder nicht-serialisierbare Objekte zu vermeiden
+                const dataToSave = JSON.parse(JSON.stringify(appData));
+                await firebase.firestore.setDoc(docRef, dataToSave);
                 console.log("Daten erfolgreich in Firestore gespeichert.");
             } catch (error) {
                 console.error("Fehler beim Speichern der Daten in Firestore:", error);
@@ -810,6 +813,20 @@
 
                 if (docSnap.exists()) {
                     const loadedData = docSnap.data();
+
+                    // BUGFIX: Sicherstellen, dass previousRank immer vorhanden ist (auch wenn null)
+                    if (loadedData.seasons) {
+                        loadedData.seasons.forEach(season => {
+                            if (season.seasonRankings) {
+                                for (const studentId in season.seasonRankings) {
+                                    if (season.seasonRankings[studentId].previousRank === undefined) {
+                                        season.seasonRankings[studentId].previousRank = null;
+                                    }
+                                }
+                            }
+                        });
+                    }
+
                     // Tiefenvergleich, um unnötige UI-Updates bei initialem Laden zu vermeiden
                     if (JSON.stringify(appData) !== JSON.stringify(loadedData)) {
                         appData = loadedData;
@@ -1484,7 +1501,7 @@
                 checkSeasonWinner(season);
             });
 
-            // Abschließend die Gesamtstatistiken aktualisieren
+            // Abschliessend die Gesamtstatistiken aktualisieren
             updateStatistics();
             saveDataToFirestore(); 
         }
