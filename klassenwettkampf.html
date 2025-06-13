@@ -453,6 +453,15 @@
             }
         }
 
+        .fade-in {
+            animation: fadeIn 0.8s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* Neues Clean Podium Design */
         .podium-section {
             padding: 60px 20px;
@@ -1764,13 +1773,11 @@
             document.getElementById('championsPodium').innerHTML = html;
         }
 
-        .fade-in {
-            animation: fadeIn 0.8s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        // Emoji für Schüler generieren
+        function getStudentEmoji(name) {
+            const emojis = ['🦸', '🌟', '⭐', '🎯', '🚀', '💎', '🔥', '⚡', '🎪', '🎨', '🎭', '🎬', '🎵', '🏅', '🎖️', '🦄', '🌈', '🎁', '🎊', '🎉'];
+            const index = name.length % emojis.length;
+            return emojis[index];
         }
 
         // Champions Podium rendern
