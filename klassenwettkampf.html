@@ -887,7 +887,7 @@
             <div class="stat-card">
                 <div class="icon">⭐</div>
                 <div class="value" id="totalWins">0</div>
-                <div class="label">Wochensiege</div>
+                <div class="label">Unterschiedliche Wochensieger</div>
             </div>
         </div>
 
@@ -1201,12 +1201,12 @@
             const totalStudents = dashboardData.students.length;
             const totalWeeks = dashboardData.seasons.reduce((sum, season) => sum + season.weeksCompleted, 0);
             const completedSeasons = dashboardData.seasons.filter(season => season.winnerId && season.winnerId !== 'tied').length;
-            const totalWins = dashboardData.students.reduce((sum, student) => sum + (student.weeklyWins || 0), 0);
+            const uniqueWeeklyWinners = dashboardData.students.filter(student => (student.weeklyWins || 0) > 0).length;
 
             document.getElementById('totalStudents').textContent = totalStudents;
             document.getElementById('totalWeeks').textContent = totalWeeks;
             document.getElementById('completedSeasons').textContent = completedSeasons;
-            document.getElementById('totalWins').textContent = totalWins;
+            document.getElementById('totalWins').textContent = uniqueWeeklyWinners;
         }
 
         // Gesamtrangliste rendern
