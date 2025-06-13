@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klassenwettkampf Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        
+        // Firebase-Konfiguration
+        const firebaseConfig = {
+            databaseURL: "https://wortartenspiele-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+
+        // Firebase initialisieren
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        
+        // Firebase-Funktionen global verfügbar machen
+        window.firebase = {
+            database,
+            ref,
+            onValue
+        };
+
+        // App initialisieren, nachdem Firebase geladen ist
+        window.initDashboard();
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto:wght@300;400;500;700&display=swap');
+
+        :root {
+            --primary-color: #0f4c75;
+            --secondary-color: #3282b8;
+            --accent-color: #bbe1fa;
+            --gold: #ffd700;
+            --silver: #c0c0c0;
+            --bronze: #cd7f32;
+            --text-light: #ffffff;
+            --text-dark: #2c3e50;
+            --bg-dark: #1a1a2e;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            --glow: 0 0 20px rgba(255,215,0,0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            color: var(--text-light);
+            overflow-x: hidden;
+        }
+
+        .hero-section {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, rgba(15,76,117,0.9), rgba(50,130,184,0.9));
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><defs><radialGradient id="a" cx="50%" cy="50%"><stop offset="0%" stop-color="rgba(255,255,255,.1)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient></defs><rect width="100" height="20" fill="url(%23a)"/></svg>') repeat;
+            opacity: 0.1;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { transform: translateX(-100px); }
+            50% { transform: translateX(100px); }
+        }
+
+        .hero-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 4rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255,215,0,0.8);
+            background: linear-gradient(45deg, var(--gold), #ffed4e, var(--gold));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: goldShine 3s ease-in-out infinite;
+            position: relative;
+            z-index: 1;
+        }
+
+        @keyframes goldShine {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .last-update {
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            position: relative;
+            z-index: 1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin: 40px 0;
+        }
+
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .stat-card .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .stat-card .value {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--gold);
+            text-shadow: var(--glow);
+        }
+
+        .stat-card .label {
+            font-size: 1rem;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .ranking-section {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 25px;
+            padding: 40px;
+            box-shadow: var(--card-shadow);
+            margin: 40px 0;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-align: center;
+            background: linear-gradient(45deg, var(--gold), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ranking-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .ranking-table th {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: var(--text-light);
+            padding: 20px 15px;
+            text-align: left;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: none;
+        }
+
+        .ranking-table td {
+            padding: 20px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .ranking-table tr:hover td {
+            background: rgba(255,255,255,0.1);
+            transform: scale(1.01);
+        }
+
+        .rank-number {
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 1.5rem;
+            width: 60px;
+            text-align: center;
+        }
+
+        .rank-1 { color: var(--gold); text-shadow: var(--glow); }
+        .rank-2 { color: var(--silver); text-shadow: 0 0 10px rgba(192,192,192,0.5); }
+        .rank-3 { color: var(--bronze); text-shadow: 0 0 10px rgba(205,127,50,0.5); }
+
+        .student-name {
+            font-weight: 500;
+            font-size: 1.2rem;
+        }
+
+        .points {
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: var(--accent-color);
+        }
+
+        .medal-icon {
+            font-size: 1.5rem;
+            margin-right: 10px;
+        }
+
+        .trophy-count {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+        }
+
+        .season-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .season-tab {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            border: 2px solid rgba(255,255,255,0.2);
+            color: var(--text-light);
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            backdrop-filter: blur(10px);
+        }
+
+        .season-tab:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .season-tab.active {
+            background: linear-gradient(135deg, var(--gold), #ffed4e);
+            color: var(--text-dark);
+            border-color: var(--gold);
+            box-shadow: var(--glow);
+        }
+
+        .progress-indicator {
+            background: rgba(255,255,255,0.1);
+            border-radius: 25px;
+            height: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(135deg, var(--gold), #ffed4e);
+            border-radius: 25px;
+            transition: width 0.5s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: progressShine 2s infinite;
+        }
+
+        @keyframes progressShine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            color: var(--text-dark);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .champions-hall {
+            background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,215,0,0.05));
+            border: 2px solid rgba(255,215,0,0.3);
+            border-radius: 25px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 0 30px rgba(255,215,0,0.2);
+        }
+
+        .champion-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .champion-card:hover {
+            transform: translateX(10px);
+            box-shadow: 0 10px 30px rgba(255,215,0,0.3);
+        }
+
+        .champion-rank {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            font-weight: 900;
+            width: 50px;
+            text-align: center;
+        }
+
+        .champion-info {
+            flex-grow: 1;
+        }
+
+        .champion-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .champion-stats {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1rem;
+            color: var(--accent-color);
+        }
+
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .stats-overview {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .ranking-section {
+                padding: 20px;
+            }
+            
+            .ranking-table th,
+            .ranking-table td {
+                padding: 10px 8px;
+                font-size: 0.9rem;
+            }
+            
+            .section-title {
+                font-size: 2rem;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.8s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-section">
+        <div class="container">
+            <h1 class="hero-title">🏆 KLASSENWETTKAMPF 🏆</h1>
+            <p class="hero-subtitle">Live Rangliste & Statistiken</p>
+            <div class="last-update" id="lastUpdate">
+                <i class="fas fa-sync-alt"></i> Letztes Update: Lade...
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Statistiken Overview -->
+        <div class="stats-overview fade-in">
+            <div class="stat-card">
+                <div class="icon">👥</div>
+                <div class="value" id="totalStudents">0</div>
+                <div class="label">Teilnehmer</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">📅</div>
+                <div class="value" id="totalWeeks">0</div>
+                <div class="label">Wochen gespielt</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">🎯</div>
+                <div class="value" id="completedSeasons">0</div>
+                <div class="label">Seasons beendet</div>
+            </div>
+            <div class="stat-card">
+                <div class="icon">⭐</div>
+                <div class="value" id="totalWins">0</div>
+                <div class="label">Wochensiege</div>
+            </div>
+        </div>
+
+        <!-- Haupt-Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Gesamtrangliste -->
+            <div class="ranking-section fade-in">
+                <h2 class="section-title">🏆 Gesamtrangliste</h2>
+                <div id="overallRankingContent">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <p>Lade Rangliste...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Season Rangliste -->
+            <div class="ranking-section fade-in">
+                <h2 class="section-title">📊 Season Rangliste</h2>
+                <div class="season-tabs" id="seasonTabs">
+                    <!-- Season tabs werden hier eingefügt -->
+                </div>
+                <div id="seasonProgress"></div>
+                <div id="seasonRankingContent">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <p>Lade Season-Daten...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Champions Hall -->
+        <div class="champions-hall fade-in">
+            <h2 class="section-title">🏅 Hall of Champions</h2>
+            
+            <h3 style="color: var(--gold); margin: 30px 0 20px 0; font-family: 'Orbitron', monospace;">
+                <i class="fas fa-trophy"></i> Meiste Wochensiege
+            </h3>
+            <div id="weeklyChampions">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Lade Champions...</p>
+                </div>
+            </div>
+
+            <h3 style="color: var(--gold); margin: 30px 0 20px 0; font-family: 'Orbitron', monospace;">
+                <i class="fas fa-crown"></i> Meiste Season-Siege
+            </h3>
+            <div id="seasonChampions">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Lade Champions...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dashboard-Daten
+        let dashboardData = {
+            students: [],
+            seasons: [],
+            lastUpdate: null
+        };
+
+        let currentActiveSeason = 1;
+
+        // Dashboard-Initialisierung
+        window.initDashboard = async function() {
+            try {
+                await loadDataFromFirebase();
+                setupRealtimeListeners();
+                renderDashboard();
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('Fehler beim Initialisieren des Dashboards:', error);
+                showError('Fehler beim Laden der Daten');
+            }
+        };
+
+        // Daten von Firebase laden
+        async function loadDataFromFirebase() {
+            return new Promise((resolve, reject) => {
+                window.firebase.onValue(window.firebase.ref(window.firebase.database, 'klassenwettkampf'), (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        
+                        // Schüler laden
+                        if (data.students) {
+                            dashboardData.students = Object.keys(data.students).map(key => ({
+                                id: key,
+                                ...data.students[key]
+                            }));
+                        }
+
+                        // Seasons laden
+                        dashboardData.seasons = [];
+                        for (let i = 1; i <= 5; i++) {
+                            const seasonData = data.seasons?.[`season${i}`] || {
+                                id: i,
+                                name: `Season ${i}`,
+                                weeksCompleted: 0,
+                                currentWeek: 1,
+                                winnerId: null,
+                                weeklyResults: [],
+                                seasonRankings: {}
+                            };
+                            dashboardData.seasons.push({
+                                id: i,
+                                name: `Season ${i}`,
+                                ...seasonData
+                            });
+                        }
+
+                        dashboardData.lastUpdate = data.settings?.lastUpdated || Date.now();
+                        resolve();
+                    } else {
+                        dashboardData.students = [];
+                        dashboardData.seasons = [];
+                        for (let i = 1; i <= 5; i++) {
+                            dashboardData.seasons.push({
+                                id: i,
+                                name: `Season ${i}`,
+                                weeksCompleted: 0,
+                                currentWeek: 1,
+                                winnerId: null,
+                                weeklyResults: [],
+                                seasonRankings: {}
+                            });
+                        }
+                        resolve();
+                    }
+                }, reject);
+            });
+        }
+
+        // Realtime Listeners einrichten
+        function setupRealtimeListeners() {
+            window.firebase.onValue(window.firebase.ref(window.firebase.database, 'klassenwettkampf'), (snapshot) => {
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    
+                    // Daten aktualisieren
+                    if (data.students) {
+                        dashboardData.students = Object.keys(data.students).map(key => ({
+                            id: key,
+                            ...data.students[key]
+                        }));
+                    }
+
+                    if (data.seasons) {
+                        dashboardData.seasons.forEach(season => {
+                            const seasonData = data.seasons[`season${season.id}`];
+                            if (seasonData) {
+                                Object.assign(season, seasonData);
+                            }
+                        });
+                    }
+
+                    dashboardData.lastUpdate = data.settings?.lastUpdated || Date.now();
+                    
+                    // Dashboard neu rendern
+                    renderDashboard();
+                    updateLastUpdateTime();
+                }
+            });
+        }
+
+        // Haupt-Dashboard rendern
+        function renderDashboard() {
+            renderStats();
+            renderOverallRanking();
+            renderSeasonTabs();
+            renderSeasonRanking(currentActiveSeason);
+            renderChampions();
+        }
+
+        // Statistiken rendern
+        function renderStats() {
+            const totalStudents = dashboardData.students.length;
+            const totalWeeks = dashboardData.seasons.reduce((sum, season) => sum + season.weeksCompleted, 0);
+            const completedSeasons = dashboardData.seasons.filter(season => season.winnerId && season.winnerId !== 'tied').length;
+            const totalWins = dashboardData.students.reduce((sum, student) => sum + (student.weeklyWins || 0), 0);
+
+            document.getElementById('totalStudents').textContent = totalStudents;
+            document.getElementById('totalWeeks').textContent = totalWeeks;
+            document.getElementById('completedSeasons').textContent = completedSeasons;
+            document.getElementById('totalWins').textContent = totalWins;
+        }
+
+        // Gesamtrangliste rendern
+        function renderOverallRanking() {
+            const sortedStudents = [...dashboardData.students].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
+            
+            let html = '<table class="ranking-table">';
+            html += '<thead><tr><th>Rang</th><th>Name</th><th>Punkte</th><th>Siege</th></tr></thead><tbody>';
+            
+            sortedStudents.forEach((student, index) => {
+                const rank = index + 1;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                let medalIcon = '';
+                
+                if (rank === 1) medalIcon = '🥇';
+                else if (rank === 2) medalIcon = '🥈';
+                else if (rank === 3) medalIcon = '🥉';
+                
+                html += `
+                    <tr>
+                        <td><span class="rank-number ${rankClass}">${medalIcon} ${rank}</span></td>
+                        <td><span class="student-name">${student.name}</span></td>
+                        <td><span class="points">${student.totalPoints || 0}</span></td>
+                        <td><span class="trophy-count">
+                            <i class="fas fa-trophy" style="color: var(--gold);"></i> ${student.weeklyWins || 0}
+                            <i class="fas fa-crown" style="color: var(--gold);"></i> ${student.seasonWins || 0}
+                        </span></td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('overallRankingContent').innerHTML = html;
+        }
+
+        // Season Tabs rendern
+        function renderSeasonTabs() {
+            let html = '';
+            dashboardData.seasons.forEach(season => {
+                const activeClass = season.id === currentActiveSeason ? 'active' : '';
+                html += `<div class="season-tab ${activeClass}" onclick="showSeason(${season.id})">${season.name}</div>`;
+            });
+            document.getElementById('seasonTabs').innerHTML = html;
+        }
+
+        // Season Rangliste rendern
+        function renderSeasonRanking(seasonId) {
+            const season = dashboardData.seasons.find(s => s.id === seasonId);
+            if (!season) return;
+
+            // Fortschrittsanzeige
+            const progress = (season.weeksCompleted / 6) * 100;
+            const progressHtml = `
+                <div class="progress-indicator">
+                    <div class="progress-bar" style="width: ${progress}%"></div>
+                    <div class="progress-text">${season.weeksCompleted}/6 Wochen</div>
+                </div>
+            `;
+            document.getElementById('seasonProgress').innerHTML = progressHtml;
+
+            // Season-Rangliste erstellen
+            const studentsWithSeasonPoints = dashboardData.students.map(student => {
+                const seasonData = season.seasonRankings[student.id];
+                return {
+                    ...student,
+                    seasonPoints: seasonData ? seasonData.points : 0
+                };
+            }).sort((a, b) => b.seasonPoints - a.seasonPoints);
+
+            let html = '<table class="ranking-table">';
+            html += '<thead><tr><th>Rang</th><th>Name</th><th>Season Punkte</th><th>Status</th></tr></thead><tbody>';
+            
+            studentsWithSeasonPoints.forEach((student, index) => {
+                const rank = index + 1;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
+                let medalIcon = '';
+                let statusIcon = '';
+                
+                if (rank === 1) medalIcon = '🥇';
+                else if (rank === 2) medalIcon = '🥈';
+                else if (rank === 3) medalIcon = '🥉';
+
+                if (season.winnerId === student.id) {
+                    statusIcon = '<i class="fas fa-crown" style="color: var(--gold);"></i> Champion';
+                } else if (season.winnerId === 'tied' && rank === 1) {
+                    statusIcon = '<i class="fas fa-handshake" style="color: var(--silver);"></i> Unentschieden';
+                } else if (season.weeksCompleted === 6) {
+                    statusIcon = '<i class="fas fa-flag-checkered"></i> Beendet';
+                } else {
+                    statusIcon = '<i class="fas fa-play"></i> Läuft';
+                }
+                
+                html += `
+                    <tr>
+                        <td><span class="rank-number ${rankClass}">${medalIcon} ${rank}</span></td>
+                        <td><span class="student-name">${student.name}</span></td>
+                        <td><span class="points">${student.seasonPoints}</span></td>
+                        <td>${statusIcon}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('seasonRankingContent').innerHTML = html;
+        }
+
+        // Champions rendern
+        function renderChampions() {
+            // Wochensiege Champions
+            const weeklyChampions = [...dashboardData.students]
+                .sort((a, b) => (b.weeklyWins || 0) - (a.weeklyWins || 0))
+                .slice(0, 5);
+
+            let weeklyHtml = '';
+            weeklyChampions.forEach((student, index) => {
+                const rank = index + 1;
+                let rankClass = '';
+                let medalIcon = '';
+                
+                if (rank === 1) {
+                    rankClass = 'rank-1';
+                    medalIcon = '🥇';
+                } else if (rank === 2) {
+                    rankClass = 'rank-2';
+                    medalIcon = '🥈';
+                } else if (rank === 3) {
+                    rankClass = 'rank-3';
+                    medalIcon = '🥉';
+                } else {
+                    medalIcon = `${rank}.`;
+                }
+                
+                weeklyHtml += `
+                    <div class="champion-card">
+                        <div class="champion-rank ${rankClass}">${medalIcon}</div>
+                        <div class="champion-info">
+                            <div class="champion-name">${student.name}</div>
+                            <div class="champion-stats">${student.weeklyWins || 0} Wochensiege</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Season-Siege Champions
+            const seasonChampions = [...dashboardData.students]
+                .sort((a, b) => (b.seasonWins || 0) - (a.seasonWins || 0))
+                .slice(0, 5);
+
+            let seasonHtml = '';
+            seasonChampions.forEach((student, index) => {
+                const rank = index + 1;
+                let rankClass = '';
+                let medalIcon = '';
+                
+                if (rank === 1) {
+                    rankClass = 'rank-1';
+                    medalIcon = '🥇';
+                } else if (rank === 2) {
+                    rankClass = 'rank-2';
+                    medalIcon = '🥈';
+                } else if (rank === 3) {
+                    rankClass = 'rank-3';
+                    medalIcon = '🥉';
+                } else {
+                    medalIcon = `${rank}.`;
+                }
+                
+                seasonHtml += `
+                    <div class="champion-card">
+                        <div class="champion-rank ${rankClass}">${medalIcon}</div>
+                        <div class="champion-info">
+                            <div class="champion-name">${student.name}</div>
+                            <div class="champion-stats">${student.seasonWins || 0} Season-Siege</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('weeklyChampions').innerHTML = weeklyHtml || '<p style="text-align: center; opacity: 0.7;">Noch keine Daten verfügbar</p>';
+            document.getElementById('seasonChampions').innerHTML = seasonHtml || '<p style="text-align: center; opacity: 0.7;">Noch keine Daten verfügbar</p>';
+        }
+
+        // Season wechseln
+        function showSeason(seasonId) {
+            currentActiveSeason = seasonId;
+            renderSeasonTabs();
+            renderSeasonRanking(seasonId);
+        }
+
+        // Letztes Update anzeigen
+        function updateLastUpdateTime() {
+            const lastUpdate = dashboardData.lastUpdate;
+            if (lastUpdate) {
+                const date = new Date(lastUpdate);
+                const timeString = date.toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                document.getElementById('lastUpdate').innerHTML = `
+                    <i class="fas fa-sync-alt"></i> Letztes Update: ${timeString}
+                `;
+            }
+        }
+
+        // Fehler anzeigen
+        function showError(message) {
+            console.error(message);
+            document.getElementById('overallRankingContent').innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; margin-bottom: 20px;"></i>
+                    <p>${message}</p>
+                    <button onclick="location.reload()" style="
+                        background: var(--gold); 
+                        color: var(--text-dark); 
+                        border: none; 
+                        padding: 10px 20px; 
+                        border-radius: 25px; 
+                        font-weight: 700; 
+                        cursor: pointer;
+                        margin-top: 20px;
+                    ">Neu laden</button>
+                </div>
+            `;
+        }
+
+        // Auto-Refresh alle 30 Sekunden
+        setInterval(() => {
+            updateLastUpdateTime();
+        }, 30000);
+
+        // Initialisierung
+        window.onload = function() {
+            // Firebase wird asynchron geladen, initDashboard wird automatisch aufgerufen
+        };
+
+    </script>
+</body>
+</html>
