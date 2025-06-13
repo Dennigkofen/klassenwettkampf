@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Klassenwettkampf Rangliste</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Firebase SDKs - 'defer' hinzugefügt, um sicherzustellen, dass die Firebase-Objekte vor dem eigenen Skript geladen sind -->
+    <!-- Firebase SDKs - Angepasst für Realtime Database -->
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js" defer></script> <!-- Realtime Database SDK -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
 
@@ -675,17 +675,17 @@
             POINTS_SYSTEM: { 1: 15, 2: 10, 3: 6, 4: 3, 5: 1 }
         };
 
-        // Global Firebase variables (will be initialized later)
+        // Globale Firebase-Variablen (werden später initialisiert)
         let app;
-        let db;
+        let db; // Realtime Database-Instanz
         let auth;
-        let userId = 'loading...'; // Placeholder until authenticated
+        let userId = 'loading...'; // Platzhalter, bis authentifiziert
 
         // Firebase Konfiguration - HIER WURDE IHRE KONFIGURATION EINGEFÜGT
         const firebaseConfig = {
             apiKey: "AIzaSyAvwY8kQ3dAQmusJk3tyL933OdCNfwQftA",
             authDomain: "klassenwettkampf.firebaseapp.com",
-            databaseURL: "https://klassenwettkampf-default-rtdb.europe-west1.firebasedatabase.app", // Hinweis: Dies ist für Realtime Database, Firestore nutzt projectId
+            databaseURL: "https://wortartenspiele-default-rtdb.europe-west1.firebasedatabase.app", // ANPASSUNG: Neue Datenbank-URL
             projectId: "klassenwettkampf",
             storageBucket: "klassenwettkampf.firebasestorage.app",
             messagingSenderId: "443034704823",
@@ -693,7 +693,10 @@
             measurementId: "G-K3SN76DC0L"
         };
 
-        const __app_id = firebaseConfig.projectId; // Verwende projectId als eindeutige App-ID für Firestore-Pfad
+        // Diese Variablen sind für die Canvas-Umgebung erforderlich und werden hier neu definiert.
+        // Sie simulieren das Verhalten der bereitgestellten globalen Variablen.
+        // In einer Live-Umgebung würden diese vom Canvas-Host injiziert.
+        const __app_id = firebaseConfig.projectId; // Verwende projectId als eindeutige App-ID für Realtime Database-Pfad
         const __firebase_config = firebaseConfig; // Verwende die direkte Konfiguration
 
         // Hilfsfunktion zum Anzeigen von Nachrichten
@@ -715,18 +718,18 @@
             });
         }
 
-        // Firebase initialization and authentication
+        // Firebase Initialisierung und Authentifizierung
         async function initFirebase() {
-            document.getElementById('loadingIndicator').style.display = 'flex'; // Show loading
-            console.log('Initializing Firebase...');
+            document.getElementById('loadingIndicator').style.display = 'flex'; // Ladeindikator anzeigen
+            console.log('Initialisiere Firebase...');
             
             // Verbesserte Prüfung der Firebase-Konfiguration
-            if (!__firebase_config || !__firebase_config.apiKey || !__firebase_config.projectId) {
+            if (!__firebase_config || !__firebase_config.apiKey || !__firebase_config.databaseURL) {
                 console.error('Firebase-Konfiguration ist unvollständig oder fehlt. Überprüfen Sie Ihre firebaseConfig.');
                 showMessage('Firebase ist nicht korrekt konfiguriert. Daten werden nicht gespeichert.', 8000);
                 document.getElementById('loadingIndicator').style.display = 'none';
                 document.getElementById('userIdDisplay').textContent = 'Firebase nicht konfiguriert';
-                // Render UI with default in-memory data
+                // UI mit Standard-In-Memory-Daten rendern
                 appData.seasons.forEach(season => {
                     renderSeasonDetails(season);
                 });
@@ -737,10 +740,11 @@
             try {
                 // `firebase` ist jetzt global verfügbar, da die Skripte mit `defer` geladen werden
                 app = firebase.initializeApp(__firebase_config);
-                db = firebase.firestore.getFirestore(app);
+                db = firebase.database.getDatabase(app); // Realtime Database-Instanz holen
                 auth = firebase.auth.getAuth(app);
 
-                // Authenticate
+                // Authentifizierung
+                // __initial_auth_token wird von der Canvas-Umgebung für authentifizierte Sitzungen bereitgestellt.
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
                 if (initialAuthToken) {
@@ -749,20 +753,20 @@
                     await firebase.auth.signInAnonymously(auth);
                 }
 
-                // Listen for auth state changes and then load data
+                // Auf Authentifizierungsstatusänderungen hören und dann Daten laden
                 firebase.auth.onAuthStateChanged(async (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('userIdDisplay').textContent = `Benutzer-ID: ${userId}`;
                         console.log('Firebase initialisiert und Benutzer authentifiziert:', userId);
-                        await loadDataFromFirestore(); // Load data after authentication
-                        startRealtimeListener(); // Start listening for changes
-                        document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading
+                        await loadDataFromRealtimeDatabase(); // Daten aus RTDB laden
+                        startRealtimeListener(); // Auf Änderungen hören
+                        document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator ausblenden
                     } else {
                         console.log('Benutzer ist abgemeldet oder Authentifizierung fehlgeschlagen.');
                         document.getElementById('userIdDisplay').textContent = 'Benutzer nicht authentifiziert.';
-                        document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading
-                        // Render UI with default in-memory data if no user
+                        document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator ausblenden
+                        // UI mit Standard-In-Memory-Daten rendern, falls kein Benutzer
                         appData.seasons.forEach(season => {
                             renderSeasonDetails(season);
                         });
@@ -772,10 +776,10 @@
 
             } catch (error) {
                 console.error("Fehler bei der Firebase-Initialisierung oder Authentifizierung:", error);
-                showMessage(`Fehler bei Firebase-Verbindung: ${error.message}. Überprüfen Sie Ihre Firestore-Sicherheitsregeln!`, 10000); // Längere Meldung für kritischen Fehler
-                document.getElementById('loadingIndicator').style.display = 'none'; // Hide loading on error
+                showMessage(`Fehler bei Firebase-Verbindung: ${error.message}. Überprüfen Sie Ihre Realtime Database-Sicherheitsregeln!`, 10000); // Angepasste Fehlermeldung
+                document.getElementById('loadingIndicator').style.display = 'none'; // Ladeindikator bei Fehler ausblenden
                 document.getElementById('userIdDisplay').textContent = 'Fehler bei Firebase-Init';
-                // Render UI with default in-memory data on error
+                // UI mit Standard-In-Memory-Daten bei Fehler rendern
                 appData.seasons.forEach(season => {
                     renderSeasonDetails(season);
                 });
@@ -783,37 +787,39 @@
             }
         }
 
-        async function saveDataToFirestore() {
-            if (!db || !userId || userId === 'loading...') { // Check if db and userId are ready
-                console.warn("Firestore oder User ID nicht verfügbar. Speichern nicht möglich.");
+        // Daten in Realtime Database speichern
+        async function saveDataToRealtimeDatabase() {
+            if (!db || !userId || userId === 'loading...') { // Prüfen, ob DB und User ID bereit sind
+                console.warn("Realtime Database oder User ID nicht verfügbar. Speichern nicht möglich.");
                 return;
             }
             try {
-                // Pfad: /artifacts/{appId}/users/{userId}/rankings/data
-                const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-                // Erstelle eine Kopie von appData, um Zirkelbezüge oder nicht-serialisierbare Objekte zu vermeiden
+                // Pfad für Realtime Database: /artifacts/{appId}/users/{userId}/rankings/data
+                const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+                // appData in JSON umwandeln, um Zirkelbezüge oder nicht-serialisierbare Objekte zu vermeiden
                 const dataToSave = JSON.parse(JSON.stringify(appData));
-                await firebase.firestore.setDoc(docRef, dataToSave);
-                console.log("Daten erfolgreich in Firestore gespeichert.");
+                await firebase.database.set(dataRef, dataToSave);
+                console.log("Daten erfolgreich in Realtime Database gespeichert.");
             } catch (error) {
-                console.error("Fehler beim Speichern der Daten in Firestore:", error);
+                console.error("Fehler beim Speichern der Daten in Realtime Database:", error);
                 showMessage(`Fehler beim Speichern: ${error.message}`, 5000);
             }
         }
 
-        async function loadDataFromFirestore() {
-            if (!db || !userId || userId === 'loading...') { // Check if db and userId are ready
-                console.warn("Firestore oder User ID nicht verfügbar. Laden nicht möglich.");
+        // Daten aus Realtime Database laden
+        async function loadDataFromRealtimeDatabase() {
+            if (!db || !userId || userId === 'loading...') { // Prüfen, ob DB und User ID bereit sind
+                console.warn("Realtime Database oder User ID nicht verfügbar. Laden nicht möglich.");
                 return;
             }
             try {
-                const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
-                const docSnap = await firebase.firestore.getDoc(docRef);
+                const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+                const snapshot = await firebase.database.get(dataRef); // Daten einmalig abrufen
 
-                if (docSnap.exists()) {
-                    const loadedData = docSnap.data();
-
-                    // BUGFIX: Sicherstellen, dass previousRank immer vorhanden ist (auch wenn null)
+                if (snapshot.exists()) {
+                    const loadedData = snapshot.val(); // .val() für Realtime Database Snapshot verwenden
+                    
+                    // Sicherstellen, dass previousRank immer vorhanden ist (auch wenn null)
                     if (loadedData.seasons) {
                         loadedData.seasons.forEach(season => {
                             if (season.seasonRankings) {
@@ -826,64 +832,58 @@
                         });
                     }
 
-                    // Tiefenvergleich, um unnötige UI-Updates bei initialem Laden zu vermeiden
+                    // Tiefenvergleich, um unnötige UI-Updates beim initialen Laden zu vermeiden
                     if (JSON.stringify(appData) !== JSON.stringify(loadedData)) {
                         appData = loadedData;
-                        console.log("Daten erfolgreich aus Firestore geladen.");
-                        // Re-render UI based on loaded data
-                        // Ensure all season details are rendered before overall UI
+                        console.log("Daten erfolgreich aus Realtime Database geladen.");
                         appData.seasons.forEach(season => {
                             renderSeasonDetails(season);
                         });
-                        initializeUI(); // Re-render everything after loading data
+                        initializeUI();
                         showMessage("Daten aus Cloud geladen.", 3000);
                     } else {
                         console.log("Geladene Daten sind identisch mit lokalen Daten.");
-                        // Still need to ensure UI is rendered if it's the initial load
                         appData.seasons.forEach(season => {
                             renderSeasonDetails(season);
                         });
                         initializeUI();
                     }
                 } else {
-                    console.log("Keine Daten in Firestore gefunden. Initialisiere mit Standarddaten.");
-                    // If no data, initialize with default, then save it.
-                    saveDataToFirestore(); // Save initial data
-                    // Render UI with default data
+                    console.log("Keine Daten in Realtime Database gefunden. Initialisiere mit Standarddaten.");
+                    saveDataToRealtimeDatabase(); // Initialdaten speichern
                     appData.seasons.forEach(season => {
                         renderSeasonDetails(season);
                     });
                     initializeUI();
                 }
             } catch (error) {
-                console.error("Fehler beim Laden der Daten aus Firestore:", error);
+                console.error("Fehler beim Laden der Daten aus Realtime Database:", error);
                 showMessage(`Fehler beim Laden: ${error.message}`, 5000);
             }
         }
 
-        // Start Realtime Listener
+        // Startet den Echtzeit-Listener für Realtime Database
         function startRealtimeListener() {
             if (!db || !userId || userId === 'loading...') return;
 
-            const docRef = firebase.firestore.doc(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
+            const dataRef = firebase.database.ref(db, `artifacts/${__app_id}/users/${userId}/rankings/data`);
 
-            firebase.firestore.onSnapshot(docRef, (doc) => {
-                if (doc.exists()) {
-                    const newData = doc.data();
-                    // Prevent infinite loops if this update itself triggers another save
-                    // Only update appData if there are actual changes and it's not our own save.
+            firebase.database.onValue(dataRef, (snapshot) => {
+                const newData = snapshot.val(); // .val() für Realtime Database Snapshot verwenden
+                if (newData) {
+                    // Verhindern von Endlosschleifen, wenn dieses Update selbst ein weiteres Speichern auslöst
                     if (JSON.stringify(appData) !== JSON.stringify(newData)) {
                         appData = newData;
-                        console.log("Realtime-Update von Firestore erhalten.");
-                        // Re-render UI on changes
+                        console.log("Echtzeit-Update von Realtime Database erhalten.");
+                        // UI bei Änderungen neu rendern
                         appData.seasons.forEach(season => {
                             renderSeasonDetails(season);
                         });
                         initializeUI();
                     }
                 } else {
-                    console.log("Dokument existiert nicht, eventuell gelöscht oder noch nicht initialisiert.");
-                    // If document is deleted externally, reset local data
+                    console.log("Daten existieren nicht in Realtime Database, eventuell gelöscht oder noch nicht initialisiert.");
+                    // Falls Daten extern gelöscht wurden, lokale Daten zurücksetzen
                     appData = {
                         students: [],
                         seasons: [
@@ -901,11 +901,11 @@
                         renderSeasonDetails(season);
                     });
                     initializeUI();
-                    showMessage("Daten in Firestore zurückgesetzt oder gelöscht.", 3000);
+                    showMessage("Daten in Realtime Database zurückgesetzt oder gelöscht.", 3000);
                 }
             }, (error) => {
-                console.error("Fehler beim Abonnieren von Realtime-Updates:", error);
-                showMessage(`Realtime-Update Fehler: ${error.message}`, 5000);
+                console.error("Fehler beim Abonnieren von Echtzeit-Updates:", error);
+                showMessage(`Echtzeit-Update Fehler: ${error.message}`, 5000);
             });
         }
 
@@ -946,7 +946,6 @@
                 currentConfirmCallback = null;
             };
         }
-
 
         // Initialisiert die UI basierend auf den Daten
         function initializeUI() {
@@ -1015,7 +1014,7 @@
             inputElement.value = ''; // Eingabefeld leeren
             renderOverallRanking();
             updateStatistics();
-            saveDataToFirestore(); // <-- Speichern nach Hinzufügen
+            saveDataToRealtimeDatabase(); // Daten in RTDB speichern
             showMessage(`Schüler "${studentName}" hinzugefügt.`);
         }
 
@@ -1054,7 +1053,6 @@
                     // Wenn der Schüler neu in der Rangliste erscheint (nicht neu in der App)
                     rankChangeHtml = `<span class="rank-change rank-new">🆕 NEU</span>`;
                 }
-
 
                 // Aktualisiere den PreviousRank für die nächste Woche
                 student.overallPreviousRank = currentRank;
@@ -1117,8 +1115,8 @@
                 }
             });
 
-            // 3. Berechne alle Punkte und Statistiken neu und speichere sie in Firestore
-            recalculateAllPointsAndStats(); // Diese Funktion ruft saveDatatoFirestore() auf
+            // 3. Berechne alle Punkte und Statistiken neu und speichere sie in Realtime Database
+            recalculateAllPointsAndStats(); // Diese Funktion ruft saveDataToRealtimeDatabase() auf
 
             showMessage(`Schüler "${studentToDelete.name}" wurde gelöscht.`);
         }
@@ -1129,7 +1127,7 @@
 
             let totalWeeksPlayed = 0;
             let totalSeasonsCompleted = 0;
-            let totalWeeklyWinners = 0; // Will be summed from student.weeklyWins
+            let totalWeeklyWinners = 0; // Wird aus student.weeklyWins summiert
 
             appData.seasons.forEach(season => {
                 totalWeeksPlayed += season.weeksCompleted;
@@ -1149,7 +1147,7 @@
         // Rendert den Inhalt eines Season-Tabs
         function renderSeasonDetails(season) {
             const seasonContentDiv = document.getElementById(`season${season.id}`);
-            // Stellen Sie sicher, dass der Div existiert, bevor Sie ihn manipulieren
+            // Sicherstellen, dass der Div existiert, bevor er manipuliert wird
             if (!seasonContentDiv) {
                 console.error(`Season content div for season${season.id} not found.`);
                 return;
@@ -1160,7 +1158,7 @@
                     <h2>${season.name}</h2>
                 </div>
                 <div class="week-buttons" id="weekButtonsSeason${season.id}">
-                    <!-- Week buttons will be generated here -->
+                    <!-- Wochen-Buttons werden hier generiert -->
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" id="progressBarSeason${season.id}"></div>
@@ -1178,7 +1176,7 @@
                             </tr>
                         </thead>
                         <tbody id="pointsInputTableBodySeason${season.id}">
-                            <!-- Input rows for students will be generated here -->
+                            <!-- Eingabezeilen für Schüler werden hier generiert -->
                         </tbody>
                     </table>
                     <div class="points-input-actions">
@@ -1198,7 +1196,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Season Ranking rows will be injected here -->
+                        <!-- Season-Ranglistenzeilen werden hier eingefügt -->
                     </tbody>
                 </table>
             `;
@@ -1207,7 +1205,7 @@
             updateProgressBar(season);
             renderSeasonRankingTable(season);
 
-            // Hide input section by default
+            // Eingabesektion standardmässig ausblenden
             document.getElementById(`pointsInputSectionSeason${season.id}`).style.display = 'none';
         }
 
@@ -1255,12 +1253,12 @@
         function updateProgressBar(season) {
             const progressBar = document.getElementById(`progressBarSeason${season.id}`);
             const progressText = document.getElementById(`progressTextSeason${season.id}`);
-            if (!progressBar || !progressText) return; // Add null check
+            if (!progressBar || !progressText) return; // Null-Check hinzufügen
 
             const percentage = (season.weeksCompleted / 6) * 100;
             progressBar.style.width = `${percentage}%`;
             progressText.textContent = `${season.weeksCompleted}/6 Wochen`;
-            // CSS Variables müssen direkt als String gesetzt werden, nicht als JS-Variable var_secondary_gradient
+            // CSS-Variablen müssen direkt als String gesetzt werden
             if (percentage === 100) {
                 progressBar.style.background = 'linear-gradient(135deg, #FFD700 0%, #FFA000 100%)'; /* Gold, wenn abgeschlossen */
             } else {
@@ -1277,7 +1275,7 @@
             }
 
             document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'block';
-            document.getElementById(`pointsInputSectionSeason${seasonId}`).querySelector('h3').textContent = `Punkte für Woche ${weekNum} eingeben`;
+            document.getElementById(`pointsInputSectionSeason${season.id}`).querySelector('h3').textContent = `Punkte für Woche ${weekNum} eingeben`;
             populatePointsInputTable(seasonId);
         }
 
@@ -1295,7 +1293,7 @@
                     <td class="live-place"></td>
                 `;
             });
-            // Initial update for all rows, passing the row itself to the function
+            // Initiales Update für alle Zeilen, Übergabe der Zeile an die Funktion
             tableBody.querySelectorAll('input[type="number"]').forEach(input => {
                 updateLivePlace(seasonId, input);
             });
@@ -1310,7 +1308,7 @@
             }
 
             document.getElementById(`pointsInputSectionSeason${seasonId}`).style.display = 'block';
-            document.getElementById(`pointsInputSectionSeason${seasonId}`).querySelector('h3').textContent = `Ergebnisse für Woche ${weekNum} bearbeiten`;
+            document.getElementById(`pointsInputSectionSeason${season.id}`).querySelector('h3').textContent = `Ergebnisse für Woche ${weekNum} bearbeiten`;
             populatePointsInputTableForEdit(seasonId, weekNum);
         }
 
@@ -1333,7 +1331,7 @@
                     <td class="live-place"></td>
                 `;
             });
-            // Initial update for all rows after populating for edit
+            // Initiales Update für alle Zeilen nach dem Befüllen für die Bearbeitung
             tableBody.querySelectorAll('input[type="number"]').forEach(input => {
                 updateLivePlace(seasonId, input);
             });
@@ -1448,7 +1446,7 @@
 
             // 2. Durch alle Seasons iterieren und Punkte sowie Siege neu addieren
             appData.seasons.forEach(season => {
-                // BUGFIX: Previous season ranks for *this specific season* must be captured
+                // Previous season ranks for *this specific season* must be captured
                 // BEFORE the season.seasonRankings for *this season* are rebuilt.
                 const previousSeasonRanksForThisSeason = {};
                 for (const studentId in season.seasonRankings) {
@@ -1468,7 +1466,7 @@
                             student.totalPoints += entry.pointsAwarded; // Addiere Punkte zur Gesamtsumme
 
                             // Season-Punkte akkumulieren
-                            seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.id) || 0) + entry.pointsAwarded); // FIX: sollte entry.studentId verwenden
+                            seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.studentId) || 0) + entry.pointsAwarded);
 
                             if (entry.place === 1) { 
                                 student.weeklyWins++;
@@ -1502,7 +1500,7 @@
 
             // Abschliessend die Gesamtstatistiken aktualisieren
             updateStatistics();
-            saveDataToFirestore(); 
+            saveDataToRealtimeDatabase(); // Daten in Realtime Database speichern
         }
 
         // Überprüft und setzt den Season-Gewinner
@@ -1542,7 +1540,6 @@
                 }
             }
         }
-
 
         // Bricht die Punkteingabe ab
         function cancelPointsInput(seasonId) {
