@@ -685,7 +685,7 @@
         const firebaseConfig = {
             apiKey: "AIzaSyAvwY8kQ3dAQmusJk3tyL933OdCNfwQftA",
             authDomain: "klassenwettkampf.firebaseapp.com",
-            databaseURL: "https://klassenwettkampf-default-rtdb.europe-west1.firebasedatabase.app",
+            databaseURL: "https://klassenwettkampf-default-rtdb.europe-west1.firebasedatabase.app", // Hinweis: Dies ist für Realtime Database, Firestore nutzt projectId
             projectId: "klassenwettkampf",
             storageBucket: "klassenwettkampf.firebasestorage.app",
             messagingSenderId: "443034704823",
@@ -1423,27 +1423,27 @@
 
         // Funktion zur vollständigen Neuberechnung aller Punkte und Statistiken
         function recalculateAllPointsAndStats() {
-            // 1. Alle Schülerdaten zurücksetzen (Punkte, Siege)
+            // 1. Alle Schülerdaten zurücksetzen (totalPoints, weeklyWins, seasonWins)
             appData.students.forEach(student => {
                 student.totalPoints = 0;
                 student.weeklyWins = 0;
                 student.seasonWins = 0; 
             });
 
-            // 2. Alle Season-Daten zurücksetzen (Ranglisten, Gewinner)
+            // 2. Durch alle Seasons iterieren und Punkte sowie Siege neu addieren
             appData.seasons.forEach(season => {
+                // BUGFIX: Previous season ranks for *this specific season* must be captured
+                // BEFORE the season.seasonRankings for *this season* are rebuilt.
+                const previousSeasonRanksForThisSeason = {};
+                for (const studentId in season.seasonRankings) {
+                    previousSeasonRanksForThisSeason[studentId] = season.seasonRankings[studentId].rank;
+                }
+                
+                // Clear season-specific rankings and winner *before* re-calculating them
                 season.seasonRankings = {};
                 season.winnerId = null;
-            });
 
-            // 3. Durch alle WeeklyResults iterieren und Punkte sowie Siege neu addieren
-            appData.seasons.forEach(season => {
                 const seasonPointsMap = new Map(); // Punkte für die aktuelle Season
-
-                // Sortiere die weeklyResults nach der ursprünglichen Reihenfolge der Wochen
-                // Dies ist wichtig, da weeklyResults auch bei Bearbeitungen hinzugefügt werden könnten
-                // und die Sortierung nur für die Anzeige/Platzierung pro Woche wichtig ist.
-                // Für die Neuberechnung müssen wir alle gespeicherten Wochen konsistent verarbeiten.
 
                 season.weeklyResults.forEach(weekData => {
                     weekData.forEach(entry => {
@@ -1454,22 +1454,12 @@
                             // Season-Punkte akkumulieren
                             seasonPointsMap.set(entry.studentId, (seasonPointsMap.get(entry.studentId) || 0) + entry.pointsAwarded);
 
-                            // Wenn dieser Eintrag ein Wochensieger war (Platz 1 in der aktuellen Wochenwertung), erhöhe weeklyWins
-                            // Der weeklyWins Zähler sollte pro Schüler insgesamt gezählt werden.
-                            // Da student.weeklyWins zu Beginn der Funktion auf 0 gesetzt wird, ist diese Inkrementierung korrekt.
-                            if (entry.place === 1) { // Hier wird der 'place' verwendet, der aus der gruppierten Rangierung kommt
+                            if (entry.place === 1) { 
                                 student.weeklyWins++;
                             }
                         }
                     });
                 });
-
-                // Season-Rangliste für diese Season aktualisieren
-                // Zuerst vorherige Ränge speichern (wenn vorhanden)
-                const previousSeasonRanks = {};
-                for (const studentId in season.seasonRankings) {
-                    previousSeasonRanks[studentId] = season.seasonRankings[studentId].rank;
-                }
 
                 // Erstelle eine sortierte Liste der Schüler für diese Season basierend auf kumulierten Season-Punkten
                 const sortedSeasonStudents = appData.students.map(s => ({
@@ -1478,16 +1468,15 @@
                 })).sort((a, b) => b.points - a.points);
 
                 // Weisen Sie die gruppenbasierten Ränge in der Season-Rangliste zu
-                let currentSeasonPlace = 1;
                 for (let i = 0; i < sortedSeasonStudents.length; i++) {
-                    currentSeasonPlace = getGroupedRank(i, 4); // Auch hier gruppenbasierten Rang verwenden
-                    
                     const studentId = sortedSeasonStudents[i].id;
                     const points = sortedSeasonStudents[i].points;
+                    const newCalculatedRank = getGroupedRank(i, 4); // Gruppenbasierter Rang
+
                     season.seasonRankings[studentId] = {
                         points: points,
-                        rank: currentSeasonPlace,
-                        previousRank: previousSeasonRanks[studentId] !== undefined ? previousSeasonRanks[studentId] : null
+                        rank: newCalculatedRank,
+                        previousRank: previousSeasonRanksForThisSeason[studentId] !== undefined ? previousSeasonRanksForThisSeason[studentId] : null
                     };
                 }
 
@@ -1497,7 +1486,7 @@
 
             // Abschließend die Gesamtstatistiken aktualisieren
             updateStatistics();
-            saveDataToFirestore(); // <-- Speichern nach Neuberechnung
+            saveDataToFirestore(); 
         }
 
         // Überprüft und setzt den Season-Gewinner
@@ -1528,13 +1517,11 @@
                     const winner = appData.students.find(s => s.id === season.winnerId);
                     if (winner) {
                         winner.seasonWins++; // Erhöhe den Season-Sieg-Zähler des Schülers
-                        // saveDataToFirestore(); // <-- Speichern nach Season-Sieg (wird von recalculateAllPointsAndStats getriggert)
                         showMessage(`🎉 ${winner.name} hat Season ${season.id} gewonnen!`, 5000);
                     }
                 } else if (firstPlaceStudents.length > 1 && season.seasonRankings[firstPlaceStudents[0]] && season.seasonRankings[firstPlaceStudents[0]].rank === 1) {
                     // Wenn es einen Gleichstand für den 1. Platz gibt (basierend auf dem Gruppensystem ist der Rang 1)
                     season.winnerId = 'tied'; // Markiere als unentschieden
-                    // saveDataToFirestore(); // <-- Speichern nach Season-Sieg (wird von recalculateAllPointsAndStats getriggert)
                     showMessage(`🤝 Season ${season.id} endete unentschieden!`, 5000);
                 }
             }
