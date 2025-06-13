@@ -526,9 +526,55 @@
     </div>
 
     <!-- User ID Display -->
-    <div id="userIdDisplay" style="text-align: center; margin-top: 10px; font-size: 0.9em; color: rgba(255,255,255,0.7);">
+    <div id="userIdDisplay" style="
+        background-color: rgba(0, 0, 0, 0.3);
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin: 10px auto; /* Center it */
+        width: fit-content;
+        max-width: 90%;
+        word-wrap: break-word; /* Ensure long IDs wrap */
+        text-align: center;
+        font-size: 0.9em;
+        color: rgba(255,255,255,0.7);
+    ">
         Lade Benutzer-ID...
     </div>
+
+    <!-- Confirmation Dialog -->
+    <div id="confirmationDialog" style="
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: var(--background-dark);
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+        z-index: 1002;
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+        border: 1px solid var(--border-color);
+    ">
+        <p id="confirmationMessage" style="margin-bottom: 25px; font-size: 1.1em;"></p>
+        <div style="display: flex; justify-content: center; gap: 15px;">
+            <button class="btn btn-primary" id="confirmOkButton">Ja, löschen</button>
+            <button class="btn btn-secondary" id="confirmCancelButton">Abbrechen</button>
+        </div>
+    </div>
+    <!-- Overlay for dialog -->
+    <div id="dialogOverlay" style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+    "></div>
 
     <div class="container">
         <div class="tabs">
@@ -576,6 +622,7 @@
                         <th>🥇 Wochensiege</th>
                         <th>🏆 Season-Siege</th>
                         <th>📈 Änderung</th>
+                        <th>Aktionen</th> <!-- New column for actions -->
                     </tr>
                 </thead>
                 <tbody>
@@ -846,6 +893,44 @@
             });
         }
 
+        // Allgemeine Funktion zum Anzeigen eines Bestätigungsdialogs
+        let currentConfirmCallback = null;
+
+        function showConfirmation(message, onConfirmCallback) {
+            const dialog = document.getElementById('confirmationDialog');
+            const overlay = document.getElementById('dialogOverlay');
+            const msgText = document.getElementById('confirmationMessage');
+            const okBtn = document.getElementById('confirmOkButton');
+            const cancelBtn = document.getElementById('confirmCancelButton');
+
+            msgText.textContent = message;
+            dialog.style.display = 'block';
+            overlay.style.display = 'block';
+            currentConfirmCallback = onConfirmCallback; // Speichert den Callback
+
+            // Entfernt vorherige Listener, um Mehrfachaufrufe zu verhindern
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+
+            okBtn.onclick = () => {
+                dialog.style.display = 'none';
+                overlay.style.display = 'none';
+                if (currentConfirmCallback) {
+                    currentConfirmCallback(true);
+                }
+                currentConfirmCallback = null;
+            };
+
+            cancelBtn.onclick = () => {
+                dialog.style.display = 'none';
+                overlay.style.display = 'none';
+                if (currentConfirmCallback) {
+                    currentConfirmCallback(false);
+                }
+                currentConfirmCallback = null;
+            };
+        }
+
 
         // Initialisiert die UI basierend auf den Daten
         function initializeUI() {
@@ -966,9 +1051,60 @@
                     <td>${student.weeklyWins}</td>
                     <td>${student.seasonWins}</td>
                     <td>${rankChangeHtml}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="requestDeleteStudent('${student.id}', '${student.name}')" title="Schüler löschen">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
                 `;
             });
             updateStatistics();
+        }
+
+        // Funktion zum Anfordern des Löschens mit Bestätigung
+        function requestDeleteStudent(studentId, studentName) {
+            showConfirmation(`Möchten Sie Schüler "${studentName}" wirklich löschen? Dies kann nicht rückgängig gemacht werden.`, (confirmed) => {
+                if (confirmed) {
+                    deleteStudent(studentId);
+                } else {
+                    showMessage(`Löschen von "${studentName}" abgebrochen.`);
+                }
+            });
+        }
+
+        // Funktion zum tatsächlichen Löschen des Schülers und aller zugehörigen Daten
+        function deleteStudent(studentId) {
+            const studentToDelete = appData.students.find(s => s.id === studentId);
+            if (!studentToDelete) {
+                console.warn(`Student with ID ${studentId} not found for deletion.`);
+                return;
+            }
+
+            // 1. Entferne den Schüler aus dem students-Array
+            appData.students = appData.students.filter(s => s.id !== studentId);
+
+            // 2. Entferne die Daten des Schülers aus allen Season-Ranglisten und Wochenergebnissen
+            appData.seasons.forEach(season => {
+                // Entferne aus der seasonRankings-Map
+                if (season.seasonRankings[studentId]) {
+                    delete season.seasonRankings[studentId];
+                }
+
+                // Filtere Einträge des gelöschten Schülers aus den weeklyResults-Arrays
+                season.weeklyResults = season.weeklyResults.map(weekData => {
+                    return weekData.filter(entry => entry.studentId !== studentId);
+                });
+
+                // Setze winnerId zurück, falls der gelöschte Schüler der Season-Gewinner war
+                if (season.winnerId === studentId) {
+                    season.winnerId = null; // Oder 'tied', wenn es ein Gleichstand war und alle verbleibenden Spieler auch einen Gleichstand bilden
+                }
+            });
+
+            // 3. Berechne alle Punkte und Statistiken neu und speichere sie in Firestore
+            recalculateAllPointsAndStats(); // Diese Funktion ruft saveDatatoFirestore() auf
+
+            showMessage(`Schüler "${studentToDelete.name}" wurde gelöscht.`);
         }
 
         // Aktualisiert die Statistik-Karten
